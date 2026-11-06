@@ -1,0 +1,16 @@
+# Binaries
+bin/
+*.test
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# IDEs and editors
+.idea/
+*.iml
+
+# AI assistants
+CLAUDE.md
+.claude/

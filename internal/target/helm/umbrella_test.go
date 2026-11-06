@@ -1,0 +1,203 @@
+package helm
+
+import (
+	"errors"
+	"maps"
+	"slices"
+	"strings"
+	"testing"
+
+	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler/chart"
+	"github.com/okdp/okdp-gitops/internal/target"
+)
+
+// The charts the compiler adds, as a compile's result names them.
+var (
+	objectsSource = chart.Ref{Repository: "oci://quay.io/okdp/charts", Chart: compiler.ObjectsChart, Version: "1.0.0"}
+)
+
+// TestUmbrella: the package's Chart.yaml, every field kept, in Helm's
+// order; its dependencies those compiled: those of Chart.yaml in its order,
+// as written, okdp among them, then the okdp-objects chart, with the objects
+// (the OAuth clients' Jobs among them); the values under the keys.
+func TestUmbrella(t *testing.T) {
+	app := chart.Ref{Repository: "https://charts.example.org", Chart: "app", Version: "1.0.0"}
+	res := &compiler.Result{
+		Values: map[string]map[string]any{
+			"web": {"a": 1, "global": map[string]any{"g": 1}}, "app": {"a": nil},
+			"okdp": {},
+		},
+		Charts:        map[string]chart.Ref{"web": app, "app": app, "okdp": app},
+		Objects:       []map[string]any{{"kind": "Job"}},
+		ObjectsSource: objectsSource,
+		Chart: chart.Metadata{
+			APIVersion: "v2", Name: "demo", Version: "1.2.3", KubeVersion: ">=1.28.0", Description: "A demo.", Type: "application",
+			Keywords: []string{"demo"}, Home: "https://example.org", Sources: []string{"https://example.org/src"},
+			Dependencies: []chart.Dependency{
+				{Name: "app", Alias: "web", Repository: app.Repository, Version: app.Version},
+				{Name: "backup", Repository: "oci://x", Version: "2.0.0"},
+				{Name: "app", Alias: "app", Repository: app.Repository, Version: app.Version},
+				{Name: "app", Alias: "okdp", Repository: app.Repository, Version: app.Version},
+			},
+			Maintainers: []chart.Maintainer{{Name: "OKDP", Email: "okdp@example.org"}},
+			Icon:        "https://example.org/icon.svg", AppVersion: "1.16", Deprecated: true, Annotations: map[string]string{"b": "2", "a": "1"},
+		},
+	}
+	files, err := Write(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{
+		"Chart.yaml": `apiVersion: v2
+name: demo
+version: 1.2.3
+kubeVersion: '>=1.28.0'
+description: A demo.
+type: application
+keywords:
+  - demo
+home: https://example.org
+sources:
+  - https://example.org/src
+dependencies:
+  - name: app
+    alias: web
+    repository: https://charts.example.org
+    version: 1.0.0
+  - name: app
+    alias: app
+    repository: https://charts.example.org
+    version: 1.0.0
+  - name: app
+    alias: okdp
+    repository: https://charts.example.org
+    version: 1.0.0
+  - name: okdp-objects
+    repository: oci://quay.io/okdp/charts
+    version: 1.0.0
+maintainers:
+  - name: OKDP
+    email: okdp@example.org
+icon: https://example.org/icon.svg
+appVersion: "1.16"
+deprecated: true
+annotations:
+  a: "1"
+  b: "2"
+`,
+		ValuesFile: target.Generated + "app:\n  a: null\nokdp: {}\nokdp-objects:\n  manifests: |\n    kind: Job\nweb:\n  a: 1\n  global:\n    g: 1\n",
+	} {
+		if got := string(files[name]); got != want {
+			t.Errorf("%s:\n got %q\nwant %q", name, got, want)
+		}
+	}
+	if len(res.Chart.Dependencies) != 4 {
+		t.Errorf("Result.Chart changed: %#v", res.Chart.Dependencies)
+	}
+}
+
+// TestWrite: the umbrella's values, marked generated, what the instance
+// publishes, its empty keys left out, and the objects as one YAML stream,
+// indented by 2 spaces, in the values of the chart that renders them, a
+// dependency; the dependencies of the instances in no file; publishing
+// nothing, no instance file; without objects, no such chart.
+func TestWrite(t *testing.T) {
+	app := chart.Ref{Repository: "https://charts.example.org", Chart: "app", Version: "1.8.0"}
+	res := &compiler.Result{
+		Values:        map[string]map[string]any{"app": {"b": 2}},
+		Charts:        map[string]chart.Ref{"app": app},
+		Objects:       []map[string]any{{"kind": "ConfigMap", "data": map[string]any{"t": "{{ .x }}"}}, {"kind": "Secret", "data": nil}},
+		ObjectsSource: objectsSource,
+		Dependencies:  []compiler.Dependency{{Instance: "demo-db", Contract: "database", Field: "backends[0].database"}},
+		Info: compiler.Info{URL: "https://x", Usage: "use it\n", Provides: []compiler.Output{
+			{Name: "demo-app", Contract: "http", Values: map[string]any{"url": "https://x"}, SecretRef: &compiler.SecretRef{Name: "creds"}},
+		}},
+	}
+	files, err := Write(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		ValuesFile: target.Generated + "app:\n  b: 2\nokdp-objects:\n  manifests: |\n    data:\n      t: '{{ .x }}'\n    kind: ConfigMap\n    ---\n    data: null\n    kind: Secret\n",
+		InfoFile:   "url: https://x\nusage: |\n  use it\nprovides:\n  - name: demo-app\n    contract: http\n    values:\n      url: https://x\n    secretRef:\n      name: creds\n",
+	}
+	if len(files) != len(want)+1 {
+		t.Errorf("got %d files, want %d and Chart.yaml", len(files), len(want))
+	}
+	for name, w := range want {
+		if got := string(files[name]); got != w {
+			t.Errorf("%s: got %q, want %q", name, got, w)
+		}
+	}
+	chartDep := "- name: okdp-objects\n    repository: oci://quay.io/okdp/charts\n    version: 1.0.0\n"
+	if !strings.Contains(string(files["Chart.yaml"]), chartDep) {
+		t.Errorf("the chart of the objects is no dependency:\n%s", files["Chart.yaml"])
+	}
+	if _, ok := res.Values[compiler.ObjectsChart]; ok {
+		t.Errorf("Result.Values changed: %v", res.Values)
+	}
+	// No object, nothing published: Chart.yaml and the values only, the
+	// dependencies all the same.
+	res.Objects, res.Info = nil, compiler.Info{}
+	if files, err = Write(res); err != nil {
+		t.Fatal(err)
+	}
+	if got := slices.Sorted(maps.Keys(files)); !slices.Equal(got, []string{"Chart.yaml", ValuesFile}) {
+		t.Errorf("nothing but the chart: got %v", got)
+	}
+	if strings.Contains(string(files["Chart.yaml"]), compiler.ObjectsChart) {
+		t.Errorf("a chart of no objects:\n%s", files["Chart.yaml"])
+	}
+	// A usage alone is published, without the empty keys, of the instance
+	// and of an output.
+	res.Info = compiler.Info{Usage: "use it\n"}
+	if files, err = Write(res); err != nil || string(files[InfoFile]) != "usage: |\n  use it\n" {
+		t.Errorf("a usage alone: %v %q", err, files[InfoFile])
+	}
+	res.Info = compiler.Info{Provides: []compiler.Output{{Name: "demo-app", Contract: "http", Values: map[string]any{}}}}
+	if files, err = Write(res); err != nil || string(files[InfoFile]) != "provides:\n  - name: demo-app\n    contract: http\n" {
+		t.Errorf("an output without values: %v %q", err, files[InfoFile])
+	}
+}
+
+// TestVendor: each chart of the umbrella the compile has an archive of is
+// vendored, once whatever its aliases, its digest in Chart.yaml; a chart
+// without an archive stays fetched by the engine; an archive too large is
+// recorded, not vendored; no archive at all, no annotation.
+func TestVendor(t *testing.T) {
+	archives := func(ref chart.Ref) ([]byte, string, error) {
+		switch ref.Chart {
+		case "web":
+			return []byte("tgz-web"), "sha256:aaa", nil
+		case "big":
+			return make([]byte, VendorMaxSize+1), "sha256:bbb", nil
+		}
+		return nil, "", errors.New("not fetched")
+	}
+	written, err := Write(&compiler.Result{Chart: chart.Metadata{APIVersion: "v2", Name: "demo", Version: "1.0.0",
+		Dependencies: []chart.Dependency{
+			{Name: "web", Alias: "a", Repository: "https://charts.example.org", Version: "1.0.0"},
+			{Name: "web", Alias: "b", Repository: "https://charts.example.org", Version: "1.0.0"},
+			{Name: "big", Repository: "oci://x", Version: "2.0.0"},
+			{Name: "lost", Repository: "oci://x", Version: "3.0.0"},
+		}}, Values: map[string]map[string]any{"a": {}, "b": {}, "big": {}, "lost": {}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Vendor(written, archives); err != nil {
+		t.Fatal(err)
+	}
+	if string(written["charts/web-1.0.0.tgz"]) != "tgz-web" || written["charts/big-2.0.0.tgz"] != nil || written["charts/lost-3.0.0.tgz"] != nil {
+		t.Errorf("vendored: %v", slices.Sorted(maps.Keys(written)))
+	}
+	chartYAML := string(written["Chart.yaml"])
+	if !strings.Contains(chartYAML, DigestsAnnotation+": web-1.0.0=sha256:aaa,big-2.0.0=sha256:bbb") || !strings.Contains(chartYAML, "repository: https://charts.example.org") {
+		t.Errorf("Chart.yaml:\n%s", chartYAML)
+	}
+	none, _ := Write(&compiler.Result{Chart: chart.Metadata{APIVersion: "v2", Name: "demo", Version: "1.0.0"}})
+	before := string(none["Chart.yaml"])
+	if err := Vendor(none, archives); err != nil || string(none["Chart.yaml"]) != before {
+		t.Errorf("nothing vendored: %v\n%s", err, none["Chart.yaml"])
+	}
+}

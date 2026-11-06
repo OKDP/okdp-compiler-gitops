@@ -1,0 +1,7 @@
+exposure:
+    loadBalancer:
+        enabled: true
+    nodePort:
+        enabled: false
+mode: 420
+port: 8
