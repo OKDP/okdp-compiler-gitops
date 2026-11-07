@@ -1,0 +1,12 @@
+# The Argo CD entry point: where Argo CD reads the output from.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: okdp
+  namespace: argocd
+spec:
+  project: okdp
+  source:
+    repoURL: https://git.example.org/okdp/deployments.git
+    targetRevision: main
+    path: argocd
