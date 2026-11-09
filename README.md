@@ -12,8 +12,9 @@ commits the output, which the engine reconciles.
   final values merged as Helm merges them, and orders the releases
   (`compiler.Build`). It holds no platform rule: a compile without a rule
   set applies none.
-- okdp-gitops gives it the OKDP platform's rules (the upstream and
-  ingress policy of `internal/policy`, wired by `deploy.Build`), and does everything around
+- okdp-gitops gives it the OKDP platform's rules (`rules/v1`, the
+  standard rule set, and the upstream and ingress policy of
+  `internal/policy`, wired by `deploy.Build`), and does everything around
   the compile. It writes what the engines deploy (`deploy`: the targets
   `helm`, `umbrella`, `flux` and `argocd`), holds the edits of the tree
   and their checks (`treeedit`) and the chart cache of the checks
@@ -217,6 +218,7 @@ re-derived all the same.
 | `gitops` | the stores (`GitStore`, `MemoryStore`, a topology's `Repositories`), each a `treeedit.Reader`, its reads snapshots that run at once, no write waiting on them nor they on a write, its transactions a `treeedit.Writer`; the compile of the tree a store holds (`Compiler`); the commits of the `treeedit` edits (`Deployments.Apply`, and a method per edit), the reads of the tree through `treeedit`; the repository of a new project (`ForgejoClient`); the output written to Git (`WriteCompiled`), the workflow of the output (`OutputWorkflow`) |
 | `catalog` | the catalog repositories of `catalogs.yaml` (`treeedit.CatalogRepository`), fetched from Git (`Loader`), indexed by okdp-compiler (`Index`) |
 | `deploy` | `Build`, `compiler.Build` with the standard rule set, Helm's merge and the policy; the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`), `TreeFiles`, the files of a tree, and what reads them back (`ReadCompiled`, `ReadPublished`, `ReadArgoRoot`) |
+| `rules` | `Standard`, the standard rule set, `rules/v1` embedded ([the rule set](docs/specs/05_rules.md)) |
 | `treeedit` | the tree read (`ReadSources`, its readers) and its edits, each with its check (`Apply`, `Check.Verify`): an instance, a connection, a named claim, a project, `catalogs.yaml`, `projects.yaml` |
 | `chartcache` | the chart cache of the checks: the upstream charts pulled from OCI registries and https repositories |
 
@@ -229,6 +231,7 @@ re-derived all the same.
 | `cmd/okdp-gitops/` | the binary: the flags, the repositories read, the compile, the writes and their commits |
 | `cmd/okdp-compile/` | the binary that compiles local directories for one target |
 | `deploy/` | the compile with the platform's rules, and what writes it |
+| `rules/` | the standard rule set, `rules/v1` |
 | `treeedit/`, `chartcache/` | the edits of the tree and their checks; the chart cache |
 | `gitops/` | the stores and the topologies, the compile of the tree, the Git transactions of the control plane's edits, the output, the workflow |
 | `catalog/` | the catalog repositories |

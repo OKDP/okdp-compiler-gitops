@@ -17,6 +17,7 @@ import (
 	"github.com/okdp/okdp-gitops/internal/target/argocd"
 	"github.com/okdp/okdp-gitops/internal/target/flux"
 	"github.com/okdp/okdp-gitops/internal/target/helm"
+	"github.com/okdp/okdp-gitops/rules"
 )
 
 type (
@@ -55,9 +56,10 @@ const (
 	DefaultFluxSource = flux.DefaultSource
 )
 
-// Build: compiler.Build with Helm's merge of the final values, unless the
-// caller gives others.
+// Build: compiler.Build with the standard rule set and Helm's merge of the
+// final values, unless the caller gives others.
 func Build(ctx context.Context, repos []compiler.Repository, opts compiler.BuildOptions) (*compiler.Tree, error) {
+	opts.Rules = rules.Or(opts.Rules)
 	if opts.Finalize == nil {
 		opts.Finalize = helmvalues.New()
 	}
@@ -118,8 +120,9 @@ func Write(res *compiler.Result) (map[string][]byte, error) { return helm.WriteV
 // ProjectAccess: the roles of the groups of the project of namespace, file
 // its project.yaml as written (nil: none), for a program that mirrors the
 // project's authority. set is the rule set it compiles with; nil, the
-// no rule, as Build.
+// standard one, as Build.
 func ProjectAccess(set *compiler.RuleSet, file []byte, namespace string) (map[string]compiler.AccessRole, error) {
+	set = rules.Or(set)
 	if err := compiler.CheckProjectName(context.Background(), set, namespace, nil); err != nil {
 		return nil, err
 	}

@@ -34,7 +34,7 @@ flowchart LR
 reads the tree, binds each claim to its provider, compiles every
 instance with what the others publish, merges its final values as Helm
 does, and orders the releases. okdp-gitops is what surrounds that: the
-platform's rules (`internal/policy`), the files the
+platform's rules (`rules/v1`, `internal/policy`), the files the
 deployers read (`deploy`, `internal/target`), the edits of the tree
 (`treeedit`), the chart cache (`chartcache`), and the Git around it. It
 checks the parts of the tree out of their repositories (one, or one per
@@ -66,6 +66,7 @@ the latest sources.
 | `cmd/okdp-compile/` | the binary that compiles local directories: its flags, `deploy.Build`, the bindings, refusals and dependencies printed, `--partial`, `--report` |
 | `cmd/okdp-gitops/sources.go` | the record of the output, `sources.yaml`: what a compile read (`record`, `writeRecord`), the run that stops when it holds (`upToDate`, the refs listed without a fetch, `listRefs`); the revision a kept project's output is the compile of, reported (`keptSince`, `reportKept`) |
 | `deploy/` | `Build`, `compiler.Build` with the standard rule set, `helmvalues.New` and `policy.CheckGlobals`, each unless the caller gives another; the targets, `TreeFiles`, the files of a compile, and what reads them back |
+| `rules/` | `Standard`, the standard rule set of `rules/v1`, embedded and read once; `TestCompilerCopy`, the copy okdp-compiler's tests read |
 | `treeedit/` | the tree read (`ReadSources`, the readers), the edits and their checks (`Apply`, `Check.Verify`), the output as a tree (`OutputTargets`, `OutputFS`, `WriteOutput`) |
 | `chartcache/` | the chart cache: a chart pulled once and kept whole, with its archive, bounded (`NewCache`, `NewRepositoryPuller`, `Archive`) |
 | `internal/render/` | a chart rendered with its final values (Helm SDK, no cluster), checked by `internal/helmvalues` (the render's policy) |
