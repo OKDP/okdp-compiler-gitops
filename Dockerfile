@@ -40,6 +40,7 @@ COPY cmd/ cmd/
 COPY deploy/ deploy/
 COPY gitops/ gitops/
 COPY internal/ internal/
+COPY rules/ rules/
 COPY treeedit/ treeedit/
 
 RUN --mount=type=cache,target=/root/.cache/go-build \

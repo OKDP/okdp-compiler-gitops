@@ -10,6 +10,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-gitops/rules"
 )
 
 // Project is a project of the tree, projects/<p>/ with its project.yaml:
@@ -79,13 +80,13 @@ func ListProjects(r Reader, split bool) ([]Project, error) {
 // refusal is a *CompileError, the compiler's message: the edit's fault.
 // A program that creates more of a project than the tree (its Namespace,
 // its repository) checks it first. set is the rule set the tree compiles
-// with; nil, no rule.
+// with; nil, the standard one.
 func CheckProjectName(set *compiler.RuleSet, r Reader, name string) error {
 	platform, _, err := readValues(r, compiler.PlatformFile)
 	if err != nil {
 		return err
 	}
-	if err := compiler.CheckProjectName(context.Background(), set, name, platform); err != nil {
+	if err := compiler.CheckProjectName(context.Background(), rules.Or(set), name, platform); err != nil {
 		return &CompileError{Project: name, Err: err}
 	}
 	return nil

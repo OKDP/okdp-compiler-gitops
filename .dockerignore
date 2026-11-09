@@ -1,5 +1,5 @@
 # The image build copies go.mod, go.sum, catalog/, chartcache/, cmd/,
-# deploy/, gitops/, internal/ and treeedit/ (Dockerfile): what is left out here neither builds the binary
+# deploy/, gitops/, internal/, rules/ and treeedit/ (Dockerfile): what is left out here neither builds the binary
 # nor, by changing, throws the build cache away.
 .git
 .github

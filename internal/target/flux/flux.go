@@ -10,6 +10,7 @@
 package flux
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"path"
@@ -21,8 +22,10 @@ import (
 
 	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-compiler/chart"
+	"github.com/okdp/okdp-compiler/value"
 	"github.com/okdp/okdp-gitops/internal/target"
 	"github.com/okdp/okdp-gitops/internal/target/helm"
+	"github.com/okdp/okdp-gitops/rules"
 )
 
 // The files of the target besides the umbrella charts.
@@ -316,55 +319,33 @@ func ServiceAccount(p target.Project) ([]byte, error) {
 // roleRule: a rule of a Role, each field a YAML flow list.
 type roleRule struct{ apiGroups, resources, verbs string }
 
-// deployerBaseGroups: the API groups a project deploys.
-var deployerBaseGroups = []string{
-	"",
-	"apps",
-	"batch",
-	"autoscaling",
-	"policy",
-	"networking.k8s.io",
-	"discovery.k8s.io",
-	"coordination.k8s.io",
-	"external-secrets.io",
-	"generators.external-secrets.io",
-	"cert-manager.io",
-	"monitoring.coreos.com",
-	"gateway.networking.k8s.io",
-	"postgresql.cnpg.io",
-	"kafka.strimzi.io",
-	"k8ssandra.io",
-	"medusa.k8ssandra.io",
-	"reaper.k8ssandra.io",
-	"cassandra.datastax.com",
-	"nifi.konpyutaika.com",
-	"sparkoperator.k8s.io",
-}
-
-// deployerEngineGroups: the groups of the deployer engines, never added:
-// they let a project drive the engine with the engine's identity.
-var deployerEngineGroups = []string{"helm.toolkit.fluxcd.io", "kustomize.toolkit.fluxcd.io", "source.toolkit.fluxcd.io", "notification.toolkit.fluxcd.io", "image.toolkit.fluxcd.io", "fluxcd.controlplane.io", "source.extensions.fluxcd.io", "argoproj.io"}
-
-// deployerRules: the rules of the Role a project's releases are installed
-// with, the platform's groups added.
+// deployerRules: the rules of the standard rule set's document
+// deployerRole, the platform's groups added.
 func deployerRules(added []string) ([]roleRule, error) {
-	groups := slices.Clone(deployerBaseGroups)
-	for _, g := range added {
-		if g != "*" && !slices.Contains(deployerEngineGroups, g) && !slices.Contains(deployerBaseGroups, g) {
-			groups = append(groups, g)
-		}
+	groups := make([]any, len(added))
+	for i, g := range added {
+		groups[i] = g
 	}
-	return []roleRule{
-		{flow(groups), `["*"]`, `["*"]`},
-		{`["rbac.authorization.k8s.io"]`, `["roles", "rolebindings"]`, `["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]`},
-	}, nil
+	values, err := rules.Standard().Values(context.Background(), "deployerRole", map[string]any{"items": groups})
+	if err != nil {
+		return nil, fmt.Errorf("the rule set's deployerRole: %w", err)
+	}
+	var out []roleRule
+	for _, r := range value.AsList(values["rules"]) {
+		m := value.AsMap(r)
+		out = append(out, roleRule{flow(m["apiGroups"]), flow(m["resources"]), flow(m["verbs"])})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("the rule set's deployerRole gives no rule")
+	}
+	return out, nil
 }
 
-// flow: the strings of v as one YAML flow list, double quoted.
-func flow(v []string) string {
-	q := make([]string, len(v))
-	for i, x := range v {
-		q[i] = strconv.Quote(x)
+// flow: the strings of v, a list, as one YAML flow list, double quoted.
+func flow(v any) string {
+	var q []string
+	for _, x := range value.AsList(v) {
+		q = append(q, strconv.Quote(value.Str(x)))
 	}
 	return "[" + strings.Join(q, ", ") + "]"
 }
