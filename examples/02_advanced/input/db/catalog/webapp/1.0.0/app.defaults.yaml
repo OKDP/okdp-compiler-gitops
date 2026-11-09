@@ -1,0 +1,7 @@
+# OKDP's defaults for the app chart, the same for every instance: over the
+# chart's values.yaml, under the values the mapping computes.
+image:
+  tag: "1.8"                          # pinned, the chart's default is latest
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {memory: 256Mi}
