@@ -85,7 +85,7 @@ the compile:
 
 | Where | How it gets the rule set |
 |---|---|
-| `deploy.Build` | `BuildOptions.Rules`; nil, the standard set |
+| `deploy.Build` | `BuildOptions.Rules` (`deploy.BuildOptions` embeds `compiler.BuildOptions`); nil, the standard set |
 | `gitops.Compiler` | its `Rules` field, for its compiles and for `Deployments.CheckProjectName`; nil, the standard set |
 | `deploy.ProjectAccess`, `treeedit.CheckProjectName` | their first argument; nil, the standard set |
 | `internal/target`, `internal/target/argocd` | they write the groups `ProjectOf` read with the compile's `Inputs.Rules`, and read no rule set themselves |
@@ -140,7 +140,9 @@ credentials Secrets, generated Secrets, PushSecrets and ExternalSecrets.
 
 The rows in `internal/policy` run through `Inputs.Finalize` and
 `Inputs.CheckGlobals`, which `deploy.Build` sets. A host that gives other
-hooks, or none, does not get them.
+hooks, or none, does not get them, nor the checks against the upstream
+charts, which run in the same `Finalize` (`helmvalues.New`,
+`internal/chartcheck`).
 
 `namespace` and `platformNamespace` also run when a project is created
 (`compiler.CheckProjectName`, `treeedit`), with `project` in place of
@@ -523,11 +525,13 @@ and its namespace (Helm SDK, `internal/render`, no cluster client, no
 `lookup`), hooks and `crds/` included, `NOTES.txt` left out, and the
 manifests' objects and hosts are checked as the compile's own are, check
 `object` and check `host` (`compiler.CheckObjects`,
-`compiler.CheckIngressHosts`). A chart key without upstream values is the
-package's, reviewed with it: not rendered. A chart that could not be
-fetched refuses the instance alone (`upstream.<key>: the chart ... could
-not be fetched`), a chart that cannot be rendered too. The render
-sees the values of the chart as the umbrella renders them; a render past
+`compiler.CheckIngressHosts`). The charts are the build's
+(`deploy.BuildOptions.Charts`, okdp-gitops': okdp-compiler reads no
+upstream chart); without them, nothing is rendered. A chart key without
+upstream values is the package's, reviewed with it: not rendered. A
+chart that could not be fetched refuses the instance alone
+(`upstream.<key>: the chart ... could not be fetched`), a chart that
+cannot be rendered too. The render sees the values of the chart as the umbrella renders them; a render past
 30 seconds is refused, its goroutine abandoned. The deny-list stays the
 early, clear message; the render catches what no list of keys can name:
 any key a chart turns into objects. The rendered output is checked,
@@ -535,9 +539,9 @@ never written.
 
 The render belongs to the CI's compile, the boundary: `okdp-gitops
 compile` and `deploy.Build` render by default. A long-running process
-turns it off, `gitops.Compiler.SkipRender`, `deploy.WithoutRender`, the
-control plane's checks of its writes and its reads: Helm's engine takes
-no context, so a render past its timeout leaves its goroutine running,
+turns it off, `gitops.Compiler.SkipRender`,
+`deploy.BuildOptions.SkipRender`, the control plane's checks of its
+writes and its reads: Helm's engine takes no context, so a render past its timeout leaves its goroutine running,
 and its memory is bounded only once it returns. Without the render the
 checks of the values stay; a chart that could not be fetched then refuses
 nothing, the values being the render's only to vouch for. What such a

@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.2
-	github.com/okdp/okdp-compiler v0.0.0-00010101000000-000000000000
+	github.com/okdp/okdp-compiler v0.8.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/rogpeppe/go-internal v1.16.0
@@ -64,7 +64,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/okdp/cel2yaml v0.1.0 // indirect
+	github.com/okdp/cel2yaml v0.2.0 // indirect
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
@@ -100,14 +100,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-// TODO(okdp-compiler): drop once OKDP/okdp-compiler releases the API used here
-// (after v0.6.0), and require that release. CI and the
-// image build fetch it next to this repository, at the commit
-// OKDP_COMPILER_REF of .github/workflows/ci.yml and build-image.yml.
-replace github.com/okdp/okdp-compiler => ../okdp-compiler
-
-// TODO(cel2yaml): drop once OKDP/cel2yaml releases the size bounds and the
-// program rebuilds of this pass (after v0.1.0), and require that release.
-// CI and the image build fetch it next to this repository.
-replace github.com/okdp/cel2yaml => ../cel2yaml

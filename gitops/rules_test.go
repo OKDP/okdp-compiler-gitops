@@ -8,6 +8,7 @@ import (
 
 	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-gitops/catalog"
+	"github.com/okdp/okdp-gitops/deploy"
 	"github.com/okdp/okdp-gitops/internal/rulestest"
 )
 
@@ -18,11 +19,11 @@ func TestCompilerRules(t *testing.T) {
 		return strings.Replace(s, "[argocd, flux-system, okdp-releases]", "[argocd, flux-system, okdp-releases, lab]", 1)
 	})
 	var got *compiler.RuleSet
-	c := &Compiler{Rules: set, build: func(_ context.Context, _ []compiler.Repository, o compiler.BuildOptions) (*compiler.Tree, error) {
+	c := &Compiler{Rules: set, build: func(_ context.Context, _ []compiler.Repository, o deploy.BuildOptions) (*compiler.Tree, error) {
 		got = o.Rules
 		return &compiler.Tree{}, nil
 	}}
-	if _, err := c.buildTree(t.Context(), nil); err != nil || got != set {
+	if _, _, err := c.buildTree(t.Context(), nil); err != nil || got != set {
 		t.Errorf("the compile's rule set: %p, %v", got, err)
 	}
 	d, _ := testDeployments(t)
@@ -57,7 +58,7 @@ func TestCompilerSkipRender(t *testing.T) {
 	}
 	compile := func(c *Compiler, tree fstest.MapFS) error {
 		t.Helper()
-		got, err := c.buildTree(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}})
+		got, _, err := c.buildTree(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -66,13 +67,13 @@ func TestCompilerSkipRender(t *testing.T) {
 	given := tree("upstream:\n  app:\n    something: 1\n")
 
 	rendering := NewCompiler(&catalog.Loader{})
-	rendering.Charts = compiler.StaticCharts(charts)
+	rendering.Charts = deploy.StaticCharts(charts)
 	if err := compile(rendering, given); err == nil || !strings.Contains(err.Error(), "the chart was rendered") {
 		t.Errorf("the default renders: %v", err)
 	}
 
 	skipping := NewCompiler(&catalog.Loader{})
-	skipping.Charts = compiler.StaticCharts(charts)
+	skipping.Charts = deploy.StaticCharts(charts)
 	skipping.SkipRender = true
 	if err := compile(skipping, given); err != nil {
 		t.Errorf("SkipRender: %v", err)

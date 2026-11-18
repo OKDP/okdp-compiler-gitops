@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/okdp/okdp-gitops/deploy"
 	"log/slog"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -39,10 +40,10 @@ type Compiler struct {
 	Catalogs *catalog.Loader
 	// Charts, when set, checks the final values against the upstream
 	// charts it fetches: their schemas, the lists an instance appends to
-	// (compiler.CompileTree).
-	Charts compiler.ChartSource
+	// (deploy.BuildOptions.Charts).
+	Charts deploy.ChartSource
 	// SkipRender leaves out the render of the charts a project gives
-	// upstream values to (deploy.WithoutRender), for a long-running
+	// upstream values to (deploy.BuildOptions.SkipRender), for a long-running
 	// process: a render past its timeout keeps its goroutine, Helm's engine
 	// taking no context. False, the default, renders: the CI's compile,
 	// the boundary, must.
@@ -64,7 +65,7 @@ type Compiler struct {
 	inflight map[string]*flight
 	// build is deploy.Build, a test's slow one; waiting, when set, is
 	// told a Compile waits on another's.
-	build   func(context.Context, []compiler.Repository, compiler.BuildOptions) (*compiler.Tree, error)
+	build   func(context.Context, []compiler.Repository, deploy.BuildOptions) (*compiler.Tree, error)
 	waiting func()
 }
 
@@ -120,7 +121,8 @@ func (c *Compiler) Compile(ctx context.Context, r treeedit.Reader) (*compiler.Tr
 	repos := append([]compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, catalogRepositories(cats)...)
 	key := memoKey(tree, cats)
 	if key == "" {
-		return c.buildTree(ctx, repos)
+		t, _, err := c.buildTree(ctx, repos)
+		return t, err
 	}
 	for {
 		c.mu.Lock()
@@ -158,48 +160,56 @@ func (c *Compiler) Compile(ctx context.Context, r treeedit.Reader) (*compiler.Tr
 // fly runs the compile of flight f, whose inputs key, repos are: kept
 // when it compiled, its waiters told even when it panics.
 func (c *Compiler) fly(ctx context.Context, key string, f *flight, repos []compiler.Repository) {
+	var unchecked bool
 	defer func() {
 		c.mu.Lock()
 		delete(c.inflight, key)
 		// A tree compiled without the checks against an upstream chart
-		// (one that could not be fetched, ChartFailures) is not kept: the
+		// (one that could not be fetched, Charts.Failures) is not kept: the
 		// next compile tries again, rather than serving it until the tree
 		// changes.
-		if f.err == nil && f.tree != nil && len(f.tree.ChartFailures) == 0 {
+		if f.err == nil && f.tree != nil && !unchecked {
 			c.remember(key, f.tree)
 		}
 		c.mu.Unlock()
 		close(f.done)
 	}()
 	f.err = errors.New("the compile failed")
-	f.tree, f.err = c.buildTree(ctx, repos)
+	f.tree, unchecked, f.err = c.buildTree(ctx, repos)
 }
 
-// buildTree is deploy.Build of the repositories of a compile.
-func (c *Compiler) buildTree(ctx context.Context, repos []compiler.Repository) (*compiler.Tree, error) {
+// buildTree is deploy.Build of the repositories of a compile. unchecked
+// says that a chart could not be fetched: the instances that name it
+// compiled without the checks against it.
+func (c *Compiler) buildTree(ctx context.Context, repos []compiler.Repository) (t *compiler.Tree, unchecked bool, err error) {
 	build := c.build
 	if build == nil {
 		build = deploy.Build
 	}
-	opts := compiler.BuildOptions{CostLimit: c.CostLimit, InstanceTimeout: c.InstanceTimeout, Charts: c.Charts, Rules: c.Rules}
-	if c.SkipRender {
-		opts.Finalize = deploy.WithoutRender()
+	charts := deploy.NewCharts(c.Charts)
+	opts := deploy.BuildOptions{
+		BuildOptions: compiler.BuildOptions{CostLimit: c.CostLimit, InstanceTimeout: c.InstanceTimeout, Rules: c.Rules},
+		Charts:       charts,
+		SkipRender:   c.SkipRender,
 	}
-	t, err := build(ctx, repos, opts)
-	if err != nil {
-		return nil, err
+	if t, err = build(ctx, repos, opts); err != nil {
+		return nil, false, err
 	}
-	if len(t.ChartFailures) > 0 {
-		for ref, err := range t.ChartFailures {
-			slog.Warn("A chart could not be fetched: the instances naming it compiled without the checks against it", "error", err, "chart", ref.Repository+"/"+ref.Chart+":"+ref.Version)
+	failures := charts.Failures()
+	for ref, err := range failures {
+		slog.Warn("A chart could not be fetched: the instances naming it compiled without the checks against it", "error", err, "chart", ref.Repository+"/"+ref.Chart+":"+ref.Version)
+	}
+	for _, ti := range t.Instances {
+		if ti.Outcome.Result == nil {
+			continue
 		}
-		for _, ti := range t.Instances {
-			for key := range ti.ChartFailures {
+		for _, key := range slices.Sorted(maps.Keys(ti.Outcome.Result.Charts)) {
+			if failures[ti.Outcome.Result.Charts[key]] != nil {
 				slog.Warn("Compiled without the checks against this chart: it could not be fetched", "instance", ti.Namespace()+"/"+ti.Name, "chart", key)
 			}
 		}
 	}
-	return t, nil
+	return t, len(failures) > 0, nil
 }
 
 func isContextErr(err error) bool {

@@ -43,7 +43,7 @@ func compileReader(r Reader) (*compiler.Tree, error) {
 	return deploy.Build(context.Background(), []compiler.Repository{
 		{Name: ".", FS: tree, Role: compiler.RoleTree},
 		{Name: "test-charts", FS: os.DirFS(catalogFixture), Role: compiler.RoleCatalog},
-	}, compiler.BuildOptions{})
+	}, deploy.BuildOptions{})
 }
 
 // The field errors of an instance are its compile's, each at its

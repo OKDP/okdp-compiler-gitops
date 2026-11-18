@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -71,69 +72,67 @@ func TestTreeNames(t *testing.T) {
 	}
 }
 
-// charts: a ChartSource that records what it is asked, and answers fsys,
-// or err.
+// charts: a ChartSource that records the charts it is asked for, gives
+// fsys, and fails each Get with err.
 type charts struct {
+	mu   sync.Mutex
 	refs []compiler.ChartRef
 	fsys fs.FS
 	err  error
 }
 
-func (c *charts) Ensure(_ context.Context, refs []compiler.ChartRef) (fs.FS, map[compiler.ChartRef]error) {
-	c.refs = refs
-	if c.err == nil {
-		return c.fsys, nil
-	}
-	failures := map[compiler.ChartRef]error{}
-	for _, ref := range refs {
-		failures[ref] = c.err
-	}
-	return c.fsys, failures
+func (c *charts) Get(_ context.Context, ref compiler.ChartRef) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.refs = append(c.refs, ref)
+	return c.err
 }
+
+func (c *charts) FS() fs.FS { return c.fsys }
 
 // loadRepository: compiler.LoadRepository, each instance with Helm's merge
 // of the final values.
 func loadRepository(repos []compiler.Repository) ([]compiler.Instance, error) {
 	instances, err := compiler.LoadRepository(context.Background(), repos)
 	for i := range instances {
-		instances[i].Inputs.Rules, instances[i].Inputs.Finalize = rules.Standard(), helmvalues.New()
+		instances[i].Inputs.Rules, instances[i].Inputs.Finalize = rules.Standard(), helmvalues.New(nil)
 	}
 	return instances, err
 }
 
-// TestCompileTreeCharts: the charts the compile names fetched once each,
-// then the values checked against them; unchecked, and why, when one
-// cannot be fetched.
-func TestCompileTreeCharts(t *testing.T) {
-	instances, err := loadRepository([]compiler.Repository{{Name: "db", FS: os.DirFS("../examples/04_claims/input/db"), Role: compiler.RoleTree}})
+// TestBuildCharts: the charts of the tree's Chart.yaml fetched once each,
+// before the compile, then the values checked against them; unchecked, and
+// why, when one cannot be fetched.
+func TestBuildCharts(t *testing.T) {
+	repos := []compiler.Repository{{Name: "db", FS: os.DirFS("../examples/04_claims/input/db"), Role: compiler.RoleTree}}
+	away := &charts{err: errors.New("the registry is away")}
+	failed := deploy.NewCharts(away)
+	tree, err := deploy.Build(t.Context(), repos, deploy.BuildOptions{Charts: failed})
 	if err != nil {
 		t.Fatal(err)
 	}
-	away := &charts{err: errors.New("the registry is away")}
-	tree := compiler.CompileTree(t.Context(), instances, away)
-	if len(tree.ChartFailures) == 0 || tree.Problems() != nil || tree.Graph == nil {
-		t.Errorf("unchecked: ChartFailures %v, problems %q", tree.ChartFailures, tree.Problems())
+	if len(failed.Failures()) == 0 || tree.Problems() != nil || tree.Graph == nil {
+		t.Errorf("unchecked: failures %v, problems %q", failed.Failures(), tree.Problems())
 	}
-	for ref, err := range tree.ChartFailures {
+	for ref, err := range failed.Failures() {
 		if !errors.Is(err, away.err) {
 			t.Errorf("chart %v: %v", ref, err)
 		}
 	}
 	if len(away.refs) == 0 || len(slices.Compact(slices.Clone(away.refs))) != len(away.refs) {
-		t.Errorf("refs: %v", away.refs)
+		t.Errorf("refs: %v, want each once", away.refs)
 	}
 	empty := &charts{fsys: fstest.MapFS{}}
-	tree = compiler.CompileTree(t.Context(), instances, empty)
-	if tree.ChartFailures != nil || tree.Problems() == nil {
-		t.Errorf("checked against a cache without the charts: ChartFailures %v, no problem", tree.ChartFailures)
+	checked := deploy.NewCharts(empty)
+	tree, err = deploy.Build(t.Context(), repos, deploy.BuildOptions{Charts: checked})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checked.Failures() != nil || tree.Problems() == nil || !strings.Contains(strings.Join(tree.Problems(), "\n"), "is not in the chart cache: helm pull ") {
+		t.Errorf("checked against a cache without the charts: failures %v, problems %q", checked.Failures(), tree.Problems())
 	}
 	if !reflect.DeepEqual(empty.refs, away.refs) {
 		t.Errorf("refs: %v, then %v", away.refs, empty.refs)
-	}
-	for _, inst := range instances {
-		if inst.Inputs.Charts != nil {
-			t.Fatal("the instances given were changed")
-		}
 	}
 }
 
@@ -152,14 +151,14 @@ func TestAccess(t *testing.T) {
 		path.Join(compiler.ProjectsDir, "demo", compiler.InstancesDir, "web", "instance.yaml"): file("service: web\nversion: 1.0.0\n"),
 		path.Join(compiler.ProjectsDir, "ops", compiler.InstancesDir, "web", "instance.yaml"):  file("service: web\nversion: 1.0.0\n"),
 	}
-	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: "db", FS: tree, Role: compiler.RoleTree}}, compiler.BuildOptions{})
+	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: "db", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if problems := tr.Problems(); problems != nil {
 		t.Fatal(problems)
 	}
-	files, _, err := deploy.TreeFiles(tr, []deploy.Target{deploy.ArgoCD{RepoURL: "https://git.example.org/o.git"}, deploy.Flux{}}, nil)
+	files, _, err := deploy.TreeFiles(tr, []deploy.Target{deploy.ArgoCD{RepoURL: "https://git.example.org/o.git"}, deploy.Flux{}}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,13 +214,13 @@ func TestPartialRederives(t *testing.T) {
 	}
 	targets := []deploy.Target{deploy.Flux{}, deploy.ArgoCD{RepoURL: "https://git.example.org/out.git"}}
 	build := func() *compiler.Tree {
-		tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: "db", FS: tree, Role: compiler.RoleTree}}, compiler.BuildOptions{})
+		tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: "db", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return tr
 	}
-	first, _, err := deploy.TreeFiles(build(), targets, nil)
+	first, _, err := deploy.TreeFiles(build(), targets, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +239,7 @@ func TestPartialRederives(t *testing.T) {
 	tree["projects/ops/project.yaml"] = file("access: {}\n")
 	tree["projects/ops/instances/broken/instance.yaml"] = file("service: admin\nversion: 1.0.0\n")
 	tree["projects/ops/instances/broken/config.yaml"] = file("n: notanumber\n")
-	second, kept, err := deploy.TreeFiles(build(), targets, previous)
+	second, kept, err := deploy.TreeFiles(build(), targets, previous, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

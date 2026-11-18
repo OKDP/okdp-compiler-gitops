@@ -51,7 +51,7 @@ func TestFiles(t *testing.T) {
 		"projects/data/instances/data-db/Chart.yaml":       file("old db\n"),
 		"projects/lab/instances/lab-x/Chart.yaml":          file("old x\n"),
 	}
-	files, kept, err := Files(tr, []target.Target{flux.Target{}, argocd.Target{RepoURL: "https://git.example.org/out.git"}}, previous)
+	files, kept, err := Files(tr, []target.Target{flux.Target{}, argocd.Target{RepoURL: "https://git.example.org/out.git"}}, previous, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestFiles(t *testing.T) {
 		t.Errorf("root, lab without its kustomization.yaml left out:\n%s", root)
 	}
 
-	files, _, err = Files(tr, []target.Target{&flux.Target{}}, nil)
+	files, _, err = Files(tr, []target.Target{&flux.Target{}}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,12 +122,12 @@ func TestFilesReleases(t *testing.T) {
 		{flux.Target{}, `release "data-db" is in namespaces "data" and "demo": the HelmReleases of okdp-releases need distinct names`},
 		{argocd.Target{RepoURL: "https://x"}, `release "data-db" is in namespaces "data" and "demo": the Applications of argocd need distinct names`},
 	} {
-		_, _, err := Files(tr, []target.Target{c.target}, previous)
+		_, _, err := Files(tr, []target.Target{c.target}, previous, nil)
 		if re, ok := errors.AsType[*target.ReleaseError](err); !ok || err.Error() != c.want || re.Release != "data-db" {
 			t.Errorf("%T: %v", c.target, err)
 		}
 	}
-	if _, _, err := Files(tr, []target.Target{helm.Target{}}, previous); err != nil {
+	if _, _, err := Files(tr, []target.Target{helm.Target{}}, previous, nil); err != nil {
 		t.Errorf("helm: %v", err)
 	}
 }
@@ -148,7 +148,7 @@ func TestAReleaseCollisionKeepsItsProjects(t *testing.T) {
 		"projects/demo/instances/demo-app-x/Chart.yaml": file("old app-x\n"),
 		"projects/web/instances/web-w/Chart.yaml":       file("old w\n"),
 	}
-	files, kept, err := Files(tr, []target.Target{flux.Target{}, argocd.Target{RepoURL: "https://git.example.org/out.git"}}, previous)
+	files, kept, err := Files(tr, []target.Target{flux.Target{}, argocd.Target{RepoURL: "https://git.example.org/out.git"}}, previous, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestAReleaseCollisionKeepsItsProjects(t *testing.T) {
 
 	// demo/app-x refused: demo kept for it, demo-app for the release.
 	refused := compiled([]string{"data/pg", "demo/app-x", "demo-app/x"}, "demo/app-x")
-	_, kept, err = Files(refused, []target.Target{flux.Target{}}, nil)
+	_, kept, err = Files(refused, []target.Target{flux.Target{}}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,11 +213,11 @@ func TestAReleaseCollisionKeepsItsProjects(t *testing.T) {
 
 	// The output of both kept holds the release: it would be written twice.
 	previous["projects/demo-app/instances/demo-app-x/Chart.yaml"] = file("old x\n")
-	if _, _, err := Files(tr, []target.Target{flux.Target{}}, previous); err == nil || err.Error() != `release "demo-app-x" is in namespaces "demo" and "demo-app": the HelmReleases of okdp-releases need distinct names` {
+	if _, _, err := Files(tr, []target.Target{flux.Target{}}, previous, nil); err == nil || err.Error() != `release "demo-app-x" is in namespaces "demo" and "demo-app": the HelmReleases of okdp-releases need distinct names` {
 		t.Errorf("two kept outputs: %v", err)
 	}
 
-	files, kept, err = Files(tr, []target.Target{helm.Umbrella{}}, nil)
+	files, kept, err = Files(tr, []target.Target{helm.Umbrella{}}, nil, nil)
 	if err != nil || len(kept) != 0 {
 		t.Fatalf("helm: %v %+v", err, kept)
 	}
@@ -239,10 +239,10 @@ func (d differs) Files([]*compiler.Result, *compiler.Graph) (map[string][]byte, 
 // differently, it fails.
 func TestFilesMerge(t *testing.T) {
 	tr := compiled([]string{"demo/a"})
-	if files, _, err := Files(tr, []target.Target{differs("a"), differs("a")}, nil); err != nil || string(files["projects/x"]) != "a" {
+	if files, _, err := Files(tr, []target.Target{differs("a"), differs("a")}, nil, nil); err != nil || string(files["projects/x"]) != "a" {
 		t.Errorf("alike: %v %v", files, err)
 	}
-	if _, _, err := Files(tr, []target.Target{differs("a"), differs("b")}, nil); err == nil || err.Error() != "projects/x: two targets write it differently" {
+	if _, _, err := Files(tr, []target.Target{differs("a"), differs("b")}, nil, nil); err == nil || err.Error() != "projects/x: two targets write it differently" {
 		t.Errorf("differently: %v", err)
 	}
 }
@@ -277,7 +277,7 @@ func TestFilesRederive(t *testing.T) {
 		"projects/demo/instances/demo-web/Chart.yaml": file("old web\n"),
 	}
 	tr.Instances[0].Inputs.Context = []compiler.ContextLayer{{Level: 1, Values: map[string]any{"access": map[string]any{"a b": "viewer"}}}}
-	files, kept, err := Files(tr, []target.Target{flux.Target{}}, previous)
+	files, kept, err := Files(tr, []target.Target{flux.Target{}}, previous, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,12 +288,12 @@ func TestFilesRederive(t *testing.T) {
 	if len(kept) != 1 || !slices.Equal(kept[0].Rederived, want) {
 		t.Errorf("Rederived: %+v", kept)
 	}
-	files, kept, err = Files(tr, []target.Target{helm.Target{}}, previous)
+	files, kept, err = Files(tr, []target.Target{helm.Target{}}, previous, nil)
 	if err != nil || string(files["projects/demo/project/access.yaml"]) != "old access\n" || kept[0].Rederived != nil {
 		t.Errorf("helm: %v %+v", err, kept)
 	}
 	tr.Instances[0].Inputs.Context = []compiler.ContextLayer{{Values: map[string]any{"global": map[string]any{"okdp": map[string]any{"policy": "x"}}}}}
-	if _, _, err := Files(tr, []target.Target{flux.Target{}}, previous); err == nil || !strings.Contains(err.Error(), "the project kept demo: its manifests of today's settings") {
+	if _, _, err := Files(tr, []target.Target{flux.Target{}}, previous, nil); err == nil || !strings.Contains(err.Error(), "the project kept demo: its manifests of today's settings") {
 		t.Errorf("the platform's settings refused: %v", err)
 	}
 }
@@ -316,7 +316,7 @@ func TestFilesUnloaded(t *testing.T) {
 		"projects/demo/instances/demo-web/Chart.yaml": file("old web\n"),
 		"projects/lost/instances/lost-web/Chart.yaml": file("old lost\n"),
 	}
-	files, kept, err := Files(tr, []target.Target{flux.Target{}}, previous)
+	files, kept, err := Files(tr, []target.Target{flux.Target{}}, previous, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +334,7 @@ func TestFilesUnloaded(t *testing.T) {
 	}
 	// A context the platform's settings refuse: its output kept as it was.
 	tr.Refused[0].Inputs.Context = []compiler.ContextLayer{{Values: map[string]any{"global": map[string]any{"okdp": map[string]any{"policy": "x"}}}}}
-	files, _, err = Files(tr, []target.Target{flux.Target{}}, previous)
+	files, _, err = Files(tr, []target.Target{flux.Target{}}, previous, nil)
 	if err != nil || string(files["projects/demo/project/access.yaml"]) != "old access\n" {
 		t.Errorf("settings refused: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestFilesDropped(t *testing.T) {
 		previous["projects/"+ns+"/instances/"+ns+"-web/Chart.yaml"] = file("old web\n")
 	}
 	for _, tg := range []target.Target{flux.Target{}, helm.Target{}} {
-		files, kept, err := Files(tr, []target.Target{tg}, previous)
+		files, kept, err := Files(tr, []target.Target{tg}, previous, nil)
 		if err != nil {
 			t.Fatalf("%T: %v", tg, err)
 		}
@@ -388,7 +388,7 @@ func TestFilesDropped(t *testing.T) {
 	other := compiled([]string{"openbao/web", "a/b-web"}, "openbao/web")
 	other.Instances[0].Inputs.Context = reserved
 	other.Instances[1].Inputs.Namespace, other.Instances[1].Inputs.Release, other.Instances[1].Name = "a", "a-b-web", "b-web"
-	if _, kept, err := Files(other, []target.Target{flux.Target{}}, fstest.MapFS{"projects/openbao/instances/a-b-web/Chart.yaml": file("old\n")}); err != nil || kept[0].Dropped == "" {
+	if _, kept, err := Files(other, []target.Target{flux.Target{}}, fstest.MapFS{"projects/openbao/instances/a-b-web/Chart.yaml": file("old\n")}, nil); err != nil || kept[0].Dropped == "" {
 		t.Errorf("a release of a project dropped: %v %+v", err, kept)
 	}
 }
@@ -417,7 +417,7 @@ func TestFilesOversizedInstanceKeepsItsProject(t *testing.T) {
 	tr := compiled([]string{"data/db", "demo/web"})
 	tr.Instances[1].Outcome.Result = &compiler.Result{Namespace: "demo", Release: "demo-web", Values: map[string]map[string]any{"app": {"a": strings.Repeat("x", flux.ConfigMapMax)}}}
 	previous := fstest.MapFS{"projects/demo/instances/demo-web/Chart.yaml": file("old web\n")}
-	files, kept, err := Files(tr, []target.Target{flux.Target{}}, previous)
+	files, kept, err := Files(tr, []target.Target{flux.Target{}}, previous, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,7 +455,7 @@ func TestWithdrawTightenedPolicy(t *testing.T) {
 	bad.Inputs.Context = []compiler.ContextLayer{settingsLayer(map[string]any{"upstream": map[string]any{"deny": []any{"extraThing"}}})}
 	bad.Inputs.Values = []map[string]any{{"upstream": map[string]any{"app": map[string]any{"extraThing": map[string]any{"x": 1}}}}}
 	bad.Outcome.Err = errors.New("upstream.app.extraThing: denied")
-	files, kept, err := Files(tr, []target.Target{flux.Target{}}, keptFiles())
+	files, kept, err := Files(tr, []target.Target{flux.Target{}}, keptFiles(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -483,7 +483,7 @@ func TestWithdrawKeepsATenantEdit(t *testing.T) {
 	bad.Outcome.Err = errors.New("upstream.app.extraThing: denied")
 	previous := keptFiles()
 	previous["projects/demo/instances/demo-bad/instance.values.yaml"] = file("app:\n  y: 1\n")
-	files, kept, err := Files(tr, []target.Target{flux.Target{}}, previous)
+	files, kept, err := Files(tr, []target.Target{flux.Target{}}, previous, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

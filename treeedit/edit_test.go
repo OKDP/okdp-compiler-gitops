@@ -145,7 +145,7 @@ func compile(r Reader) (*compiler.Tree, error) {
 	return deploy.Build(context.Background(), []compiler.Repository{
 		{Name: ".", FS: tree, Role: compiler.RoleTree},
 		{Name: "test-charts", FS: os.DirFS(catalogFixture), Role: compiler.RoleCatalog},
-	}, compiler.BuildOptions{})
+	}, deploy.BuildOptions{})
 }
 
 // apply applies e, checked.
@@ -745,7 +745,7 @@ func TestTheOutputIsReadBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, _, err := deploy.TreeFiles(tree, []deploy.Target{deploy.Flux{}}, nil)
+	files, _, err := deploy.TreeFiles(tree, []deploy.Target{deploy.Flux{}}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

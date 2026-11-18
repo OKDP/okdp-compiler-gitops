@@ -2,6 +2,7 @@ package deploy_test
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"strings"
 	"testing"
@@ -51,7 +52,7 @@ func compileFixture(t *testing.T, config string, edit func(string) string) (erro
 		}
 		return s
 	})
-	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, compiler.BuildOptions{Charts: compiler.StaticCharts(charts), Rules: rules})
+	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{BuildOptions: compiler.BuildOptions{Rules: rules}, Charts: deploy.NewCharts(deploy.StaticCharts(charts))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +139,7 @@ func TestRenderedExternalIPs(t *testing.T) {
 func TestRenderOnlyTenantKeys(t *testing.T) {
 	tree, charts := renderFixture("")
 	delete(charts, "charts.example.org/app-1.0.0/app/Chart.yaml")
-	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, compiler.BuildOptions{Charts: compiler.StaticCharts(charts)})
+	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{Charts: deploy.NewCharts(deploy.StaticCharts(charts))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,23 +148,18 @@ func TestRenderOnlyTenantKeys(t *testing.T) {
 	}
 }
 
-// failedCharts: a ChartSource that could fetch none of the charts.
+// failedCharts: a ChartSource that can fetch none of the charts.
 type failedCharts struct{ err error }
 
-func (f failedCharts) Ensure(_ context.Context, refs []compiler.ChartRef) (fs.FS, map[compiler.ChartRef]error) {
-	failures := map[compiler.ChartRef]error{}
-	for _, ref := range refs {
-		failures[ref] = f.err
-	}
-	return fstest.MapFS{}, failures
-}
+func (f failedCharts) Get(context.Context, compiler.ChartRef) error { return f.err }
+func (f failedCharts) FS() fs.FS                                    { return fstest.MapFS{} }
 
 // TestRenderRequiresFetchedChart: upstream values given to a chart that
 // could not be fetched refuse that instance alone: others compile.
 func TestRenderRequiresFetchedChart(t *testing.T) {
 	tree, _ := renderFixture("upstream:\n  app:\n    something: 1\n")
 	tree["projects/demo/instances/other/instance.yaml"] = &fstest.MapFile{Data: []byte("service: app\nversion: 1.0.0\n")}
-	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, compiler.BuildOptions{Charts: failedCharts{context.Canceled}})
+	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{Charts: deploy.NewCharts(failedCharts{errors.New("the registry is away")})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,25 +178,25 @@ func TestRenderRequiresFetchedChart(t *testing.T) {
 func TestWithoutRender(t *testing.T) {
 	tree, charts := renderFixture("upstream:\n  app:\n    something: 1\n")
 	charts["charts.example.org/app-1.0.0/app/templates/fail.yaml"] = &fstest.MapFile{Data: []byte(`{{ fail "rendered" }}`)}
-	build := func(tree fstest.MapFS, source compiler.ChartSource, finalize compiler.Finalize) error {
+	build := func(tree fstest.MapFS, source deploy.ChartSource, skip bool) error {
 		t.Helper()
-		tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, compiler.BuildOptions{Charts: source, Finalize: finalize})
+		tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{Charts: deploy.NewCharts(source), SkipRender: skip})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return tr.Instance("demo", "web").Err()
 	}
-	if err := build(tree, compiler.StaticCharts(charts), nil); err == nil || !strings.Contains(err.Error(), "rendered") {
+	if err := build(tree, deploy.StaticCharts(charts), false); err == nil || !strings.Contains(err.Error(), "rendered") {
 		t.Errorf("the default renders: %v", err)
 	}
-	if err := build(tree, compiler.StaticCharts(charts), deploy.WithoutRender()); err != nil {
+	if err := build(tree, deploy.StaticCharts(charts), true); err != nil {
 		t.Errorf("without the render: %v", err)
 	}
-	if err := build(tree, failedCharts{context.Canceled}, deploy.WithoutRender()); err != nil {
+	if err := build(tree, failedCharts{errors.New("the registry is away")}, true); err != nil {
 		t.Errorf("a chart that could not be fetched, without the render: %v", err)
 	}
 	denied, _ := renderFixture("upstream:\n  app:\n    extraResources: [{kind: ConfigMap}]\n")
-	if err := build(denied, compiler.StaticCharts(charts), deploy.WithoutRender()); err == nil || !strings.Contains(err.Error(), "extraResources is denied") {
+	if err := build(denied, deploy.StaticCharts(charts), true); err == nil || !strings.Contains(err.Error(), "extraResources is denied") {
 		t.Errorf("the deny-list stays: %v", err)
 	}
 }

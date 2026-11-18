@@ -1,15 +1,20 @@
 // Package deploy writes what a tree compiled by okdp-compiler deploys: each
 // instance's umbrella chart and the files of its GitOps engine, and reads
-// them back. It holds what compiling does not: where the files go, and
-// Helm's merge of the final values.
+// them back. It holds what compiling does not: where the files go, Helm's
+// merge of the final values, and their checks against the upstream charts,
+// which the compiler does not read.
 package deploy
 
 import (
 	"context"
 	"io/fs"
+	"slices"
 
 	compiler "github.com/okdp/okdp-compiler"
 
+	"github.com/okdp/okdp-compiler/chart"
+
+	"github.com/okdp/okdp-gitops/internal/chartcheck"
 	"github.com/okdp/okdp-gitops/internal/helmvalues"
 	"github.com/okdp/okdp-gitops/internal/output"
 	"github.com/okdp/okdp-gitops/internal/policy"
@@ -41,6 +46,12 @@ type (
 	Compiled = helm.Compiled
 	// ChartArchives: the archive of a chart, what an umbrella vendors.
 	ChartArchives = helm.ChartArchives
+	// ChartSource: where a build reads the upstream charts from, a
+	// chartcache.Cache or StaticCharts.
+	ChartSource = chartcheck.Source
+	// Charts: the upstream charts of one build (NewCharts), each fetched
+	// once, and why one could not be (Charts.Failures).
+	Charts = chartcheck.Charts
 )
 
 const (
@@ -56,30 +67,92 @@ const (
 	DefaultFluxSource = flux.DefaultSource
 )
 
-// Build: compiler.Build with the standard rule set and Helm's merge of the
-// final values, unless the caller gives others.
-func Build(ctx context.Context, repos []compiler.Repository, opts compiler.BuildOptions) (*compiler.Tree, error) {
-	opts.Rules = rules.Or(opts.Rules)
-	if opts.Finalize == nil {
-		opts.Finalize = helmvalues.New()
-	}
-	if opts.CheckGlobals == nil {
-		opts.CheckGlobals = policy.CheckGlobals
-	}
-	return compiler.Build(ctx, repos, opts)
+// StaticCharts: a chart cache filled already, okdp-compile's --charts:
+// nothing pulled, a chart it lacks failing the check of the instance that
+// names it, with the command that pulls it.
+func StaticCharts(fsys fs.FS) ChartSource { return chartcheck.Static(fsys) }
+
+// NewCharts: the upstream charts of one build, read from src; nil for a
+// nil src: none checked. A Charts is valid for one build.
+func NewCharts(src ChartSource) *Charts { return chartcheck.New(src) }
+
+// BuildOptions: compiler.BuildOptions, with what okdp-gitops adds to a
+// build.
+type BuildOptions struct {
+	compiler.BuildOptions
+	// Charts, when set, checks the final values against the upstream charts
+	// (chartcheck): their schemas over their defaults, the lists an instance
+	// appends to. Build fetches the charts of every Chart.yaml of the tree
+	// before the compile (compiler.BuildOptions.Loaded), so that no fetch
+	// counts against an instance's timeout. A chart that cannot be fetched
+	// leaves its keys unchecked (Charts.Failures), and refuses the upstream
+	// values a project that is not privileged gives it (CheckRendered).
+	Charts *Charts
+	// SkipRender leaves out the render of the charts a project gives
+	// upstream values to, for a long-running process: a render past its
+	// timeout keeps its goroutine, Helm's engine taking no context. The
+	// CI's compile, the boundary, renders.
+	SkipRender bool
 }
 
-// WithoutRender: a BuildOptions.Finalize of Build's own, without the render
-// of the charts a project gives upstream values to (internal/render) and so
-// the refusal of those values when their chart could not be fetched; the
-// other checks are kept. For a long-running process only: the CI's compile,
-// Build's default, is the boundary (gitops.Compiler.SkipRender).
-func WithoutRender() compiler.Finalize { return helmvalues.WithoutRender() }
+// Build: compiler.Build with the standard rule set, Helm's merge of the
+// final values and the platform's policy, checked against opts.Charts,
+// unless the caller gives a rule set, a Finalize or a CheckGlobals.
+func Build(ctx context.Context, repos []compiler.Repository, opts BuildOptions) (*compiler.Tree, error) {
+	o := opts.BuildOptions
+	o.Rules = rules.Or(o.Rules)
+	if o.Finalize == nil {
+		o.Finalize = helmvalues.New(opts.Charts)
+		if opts.SkipRender {
+			o.Finalize = helmvalues.WithoutRender(opts.Charts)
+		}
+	}
+	if o.CheckGlobals == nil {
+		o.CheckGlobals = policy.CheckGlobals
+	}
+	if opts.Charts != nil {
+		loaded := o.Loaded
+		o.Loaded = func(ctx context.Context, instances []compiler.Instance) {
+			// A context ended is the build's: its compile says so.
+			_ = opts.Charts.Fetch(ctx, dependencies(instances))
+			if loaded != nil {
+				loaded(ctx, instances)
+			}
+		}
+	}
+	return compiler.Build(ctx, repos, o)
+}
+
+// dependencies: the upstream charts of the Chart.yaml of instances, once
+// each, in order.
+func dependencies(instances []compiler.Instance) []chart.Ref {
+	var out []chart.Ref
+	for _, in := range instances {
+		if in.Definition == nil {
+			continue
+		}
+		for _, d := range in.Definition.Chart.Dependencies {
+			if ref := d.Ref(); !slices.Contains(out, ref) {
+				out = append(out, ref)
+			}
+		}
+	}
+	return out
+}
+
+// CoalesceValues: values over a chart's defaults, as Helm coalesces them
+// before it renders the chart (chartutil.CoalesceValues): maps merge key by
+// key, a null in values deletes the default. It changes neither argument.
+func CoalesceValues(values, defaults map[string]any) (map[string]any, error) {
+	return chartcheck.Coalesce(defaults, values)
+}
 
 // TreeFiles: the files of t for each target, previous what was written
-// last, and the projects kept as they are (output.Files).
-func TreeFiles(t *compiler.Tree, targets []Target, previous fs.FS) (map[string][]byte, []compiler.KeptProject, error) {
-	return output.Files(t, targets, previous)
+// last, and the projects kept as they are (output.Files); charts, the
+// upstream charts the withdrawal of a refused instance renders
+// (Charts.FS), nil for none.
+func TreeFiles(t *compiler.Tree, targets []Target, previous, charts fs.FS) (map[string][]byte, []compiler.KeptProject, error) {
+	return output.Files(t, targets, previous, charts)
 }
 
 // ReleaseTaken: the compiled instance of t, of another namespace, whose

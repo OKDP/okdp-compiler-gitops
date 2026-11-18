@@ -77,7 +77,7 @@ func compiled(t *testing.T) ([]*compiler.Result, *compiler.Graph) {
 		if namespace == "demo" {
 			layers = append(layers, compiler.ContextLayer{Level: 1, Values: demoProject})
 		}
-		return compiler.Instance{Definition: def, Inputs: compiler.Inputs{Rules: rules.Standard(), Finalize: helmvalues.New(), Contracts: contracts, Context: layers, Values: []map[string]any{values}, Release: release, Namespace: namespace}}
+		return compiler.Instance{Definition: def, Inputs: compiler.Inputs{Rules: rules.Standard(), Finalize: helmvalues.New(nil), Contracts: contracts, Context: layers, Values: []map[string]any{values}, Release: release, Namespace: namespace}}
 	}
 	var results []*compiler.Result
 	for _, o := range compiler.CompileAll(context.Background(), []compiler.Instance{

@@ -3,6 +3,7 @@ package output
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"maps"
 	"path"
 	"slices"
@@ -26,14 +27,15 @@ import (
 // prune it; and a problem per instance withdrawn, said in k's. A project
 // keeps its output so that a mistake in its sources does not take down what
 // runs: not so that a value the platform now denies stays deployed.
-func withdraw(k compiler.KeptProject, files map[string][]byte) (map[string][]byte, []string) {
+// charts holds the upstream charts the check renders, nil for none.
+func withdraw(k compiler.KeptProject, files map[string][]byte, charts fs.FS) (map[string][]byte, []string) {
 	out := files
 	var problems []string
 	for _, inst := range k.Instances {
 		if inst.Depends || inst.Outcome.Err == nil {
 			continue
 		}
-		why := violation(inst.Instance, files)
+		why := violation(inst.Instance, files, charts)
 		if why == nil {
 			continue
 		}
@@ -70,9 +72,10 @@ func dropResource(b []byte, r string) []byte {
 // (policy.UpstreamCheck) and the ingress hosts (policy.CheckIngressValues),
 // and what the charts of the keys it gives values to render
 // (compiler.CheckObjects, compiler.CheckIngressHosts). nil when it passes,
-// or when nothing can tell: no output, no chart at hand, a chart that does
-// not render (the instance's refusal says why it compiled no further).
-func violation(ti *compiler.TreeInstance, files map[string][]byte) error {
+// or when nothing can tell: no output, no chart at hand (charts nil, or
+// a chart it lacks), a chart that does not render (the instance's refusal
+// says why it compiled no further).
+func violation(ti *compiler.TreeInstance, files map[string][]byte, charts fs.FS) error {
 	ctx := context.Background() // the output of a tree is written without one
 	in := ti.Inputs
 	settings, err := compiler.PlatformOf(ctx, in)
@@ -109,16 +112,16 @@ func violation(ti *compiler.TreeInstance, files map[string][]byte) error {
 	if err := policy.CheckIngressValues(ctx, in.Rules, in.Namespace, settings, restricted); err != nil {
 		return err
 	}
-	if in.Charts == nil {
+	if charts == nil {
 		return nil
 	}
 	refs := dependencyRefs(files[path.Join(dir, "Chart.yaml")])
 	for _, key := range slices.Sorted(maps.Keys(restricted)) {
 		ref, ok := refs[key]
-		if !ok || in.ChartFailures[ref] != nil {
+		if !ok {
 			continue
 		}
-		objects, err := render.Objects(render.Request{Charts: in.Charts, Ref: ref, Key: key, Values: deployed[key], Release: ti.Release(), Namespace: in.Namespace})
+		objects, err := render.Objects(render.Request{Charts: charts, Ref: ref, Key: key, Values: deployed[key], Release: ti.Release(), Namespace: in.Namespace})
 		if err != nil {
 			continue
 		}

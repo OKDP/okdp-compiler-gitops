@@ -53,7 +53,9 @@ import (
 // written, Kept.Dropped says why, and the tree does not fail. An error of
 // previous (a symbolic link, a file over its bounds) fails it. kept are
 // the projects kept, and why.
-func Files(t *compiler.Tree, targets []target.Target, previous fs.FS) (map[string][]byte, []compiler.KeptProject, error) {
+// charts holds the upstream charts the withdrawal of a refused instance
+// renders (withdraw), nil for none.
+func Files(t *compiler.Tree, targets []target.Target, previous, charts fs.FS) (map[string][]byte, []compiler.KeptProject, error) {
 	var shared []string // the objects named after the releases, of each target that has them
 	for _, tg := range targets {
 		if objects := releaseObjects(tg); objects != "" && !slices.Contains(shared, objects) {
@@ -94,7 +96,7 @@ func Files(t *compiler.Tree, targets []target.Target, previous fs.FS) (map[strin
 			return nil, nil, fmt.Errorf("the output of the project kept %s: %w", k.Namespace, err)
 		}
 		var withdrawn []string
-		files, withdrawn = withdraw(k, files)
+		files, withdrawn = withdraw(k, files, charts)
 		kept[i].Problems = append(kept[i].Problems, withdrawn...)
 		previousFiles := files
 		var dropped error

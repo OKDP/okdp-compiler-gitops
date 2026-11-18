@@ -14,6 +14,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/okdp/okdp-compiler/value"
+	"github.com/okdp/okdp-gitops/internal/chartcheck"
 	"github.com/okdp/okdp-gitops/internal/helmtest"
 )
 
@@ -30,11 +31,22 @@ var update = flag.Bool("update", false, "rewrite the final.yaml of testdata/helm
 // renders (helm-final.json): by top-level key, the value.
 var helmFinalKnown = map[string]map[string]M{}
 
+// coalesceKnown: by values case, where okdp-gitops' Helm library
+// (chartutil.CoalesceValues of helm.sh/helm/v3 in go.mod, chartcheck's)
+// coalesces differently from the Helm 3 render of the fixtures
+// (helm3.json, or helm.json): by dotted path, the value it gives. Helm
+// 3.22 keeps a null default under a map the values do not set, which Helm
+// 3.19 and Helm 4 drop.
+var coalesceKnown = map[string]map[string]any{
+	"nulls": {"tbl.defaultNull": nil},
+}
+
 // TestHelmValues: for each testdata/helm/values/<case>, the chart defaults
-// (values.yaml) and the -f layers (layer-*.yaml) read and coalesced as Helm
-// does (helm.json); and the final values the compiler writes for these
-// layers (final.yaml, rewritten by -update), which Helm renders the same
-// (helm-final.json). Each deployer's major version renders them as it
+// (values.yaml) and the -f layers (layer-*.yaml) read and coalesced as the
+// check against the chart does (chartcheck.Coalesce, Helm 3's: helm3.json,
+// or helm.json where Helm 3 renders as Helm 4); and the final values the
+// compiler writes for these layers (final.yaml, rewritten by -update),
+// which Helm renders the same (helm-final.json), and coalesce the same. Each deployer's major version renders them as it
 // renders the layers (helm<major>.json, or helm.json), but for the known
 // differences (helmFinalKnown).
 func TestHelmValues(t *testing.T) {
@@ -80,10 +92,16 @@ func TestHelmValues(t *testing.T) {
 				}
 				return
 			}
-			// What the chart's templates see.
+			// What the chart's templates see: Helm 4's render, and Helm 3's,
+			// the check's (chartcheck.Coalesce).
 			want := helmtest.JSON(t, filepath.Join(dir, "helm.json"))
-			if got := chart.Coalesce(defaults, user); !reflect.DeepEqual(any(got), want) {
-				t.Errorf("coalesced values:\n got %#v\nwant %#v", got, want)
+			want3 := helmtest.Variant(t, dir, "helm.json", "3")
+			if want3 == nil {
+				want3 = want
+			}
+			want3 = withKnown(want3, coalesceKnown[filepath.Base(dir)])
+			if got := coalesce(t, defaults, user); !reflect.DeepEqual(any(got), want3) {
+				t.Errorf("coalesced values:\n got %#v\nwant %#v", got, want3)
 			}
 			b, err := os.ReadFile(golden)
 			if err != nil {
@@ -96,9 +114,15 @@ func TestHelmValues(t *testing.T) {
 				t.Errorf("Helm renders the final values differently:\n got %#v\nwant %#v", got, want)
 			}
 			// Coalesced again (as Helm does when it renders them), the final
-			// values give what the templates see.
-			if got := chart.Coalesce(defaults, final); !reflect.DeepEqual(any(got), want) {
-				t.Errorf("final values coalesced:\n got %#v\nwant %#v", got, want)
+			// values give what Helm 3's templates see of them.
+			final3 := helmtest.Variant(t, dir, "helm-final.json", "3")
+			if final3 == nil {
+				final3 = want3
+			} else {
+				final3 = withKnown(final3, coalesceKnown[filepath.Base(dir)])
+			}
+			if got := coalesce(t, defaults, final); !reflect.DeepEqual(any(got), final3) {
+				t.Errorf("final values coalesced:\n got %#v\nwant %#v", got, final3)
 			}
 			// The renders of the deployers' Helm versions: helm<major>.json
 			// where a major version renders the layers differently from
@@ -179,7 +203,7 @@ func TestHelmSchema(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			v, err := checkSchema("values.schema.json", schema, chart.Coalesce(defaults, user))
+			v, err := checkSchema("values.schema.json", schema, coalesce(t, defaults, user))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -216,10 +240,36 @@ func TestHelmSchema(t *testing.T) {
 	}
 }
 
+// withKnown: a copy of v, a render, with the value of each dotted path of
+// known set (coalesceKnown).
+func withKnown(v any, known map[string]any) any {
+	out := value.Copy(v)
+	for p, x := range known {
+		keys := strings.Split(p, ".")
+		m := value.AsMap(out)
+		for _, k := range keys[:len(keys)-1] {
+			m = value.AsMap(m[k])
+		}
+		m[keys[len(keys)-1]] = x
+	}
+	return out
+}
+
+// coalesce: values over defaults, as the check against the chart coalesces
+// them (chartcheck.Coalesce).
+func coalesce(t *testing.T, defaults, values M) M {
+	t.Helper()
+	out, err := chartcheck.Coalesce(defaults, values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
 // checkSchema: the values against the JSON schema b, read from name (none
 // when b is nil: the chart has no schema), one line per violation with its
-// path, as Helm prints them (Validate): upstreamChart.validate, the schema
-// compiled for this check alone.
+// path, as Helm prints them (Validate), as chartcheck checks them, the
+// schema compiled for this check alone.
 func checkSchema(name string, b []byte, values M) (string, error) {
 	if b == nil {
 		return "", nil

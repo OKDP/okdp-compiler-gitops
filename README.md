@@ -12,16 +12,19 @@ commits the output, which the engine reconciles.
   final values merged as Helm merges them, and orders the releases
   (`compiler.Build`). It holds the rules every compile needs, its
   mandatory set, and no platform's policy: a compile without a rule set
-  refuses nothing.
+  refuses nothing. It reads no upstream chart.
 - okdp-gitops gives it the OKDP platform's rules (`rules/v1`, the
   standard rule set, added to the mandatory one, and the upstream and ingress policy of
   `internal/policy`, wired by `deploy.Build`), and does everything around
-  the compile. It writes what the engines deploy (`deploy`: the targets
-  `helm`, `umbrella`, `flux` and `argocd`), holds the edits of the tree
-  and their checks (`treeedit`) and the chart cache of the checks
-  (`chartcache`). It keeps the projects with a problem as their last
-  output. On the Git side, it checks out the parts of the tree (io and
-  split topologies; the repository of a new project, on Forgejo, named
+  the compile. It checks the final values against the upstream charts
+  (`internal/chartcheck`: their schemas over their defaults, the lists
+  an instance appends to), which the compiler does not read, with the
+  chart cache of the checks (`chartcache`). It writes what the engines
+  deploy (`deploy`: the targets `helm`, `umbrella`, `flux` and
+  `argocd`), holds the edits of the tree and their checks (`treeedit`).
+  It keeps the projects with a problem as their last output. On the Git
+  side, it checks out the parts of the tree (io and split topologies;
+  the repository of a new project, on Forgejo, named
   after the topology's projects url), fetches the catalog repositories,
   and commits the targets' files under `compiled/`, on the revision it
   read. It keeps the workflow of the CI, and the Git transactions of the
@@ -218,10 +221,10 @@ re-derived all the same.
 |---|---|
 | `gitops` | the stores (`GitStore`, `MemoryStore`, a topology's `Repositories`), each a `treeedit.Reader`, its reads snapshots that run at once, no write waiting on them nor they on a write, its transactions a `treeedit.Writer`; the compile of the tree a store holds (`Compiler`); the commits of the `treeedit` edits (`Deployments.Apply`, and a method per edit), the reads of the tree through `treeedit`; the repository of a new project (`ForgejoClient`); the output written to Git (`WriteCompiled`), the workflow of the output (`OutputWorkflow`) |
 | `catalog` | the catalog repositories of `catalogs.yaml` (`treeedit.CatalogRepository`), fetched from Git (`Loader`), indexed by okdp-compiler (`Index`) |
-| `deploy` | `Build`, `compiler.Build` with the standard rule set, Helm's merge and the policy; the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`), `TreeFiles`, the files of a tree, and what reads them back (`ReadCompiled`, `ReadPublished`, `ReadArgoRoot`) |
+| `deploy` | `Build`, `compiler.Build` with the standard rule set, Helm's merge and the policy, the final values checked against the upstream charts (`BuildOptions.Charts`: `NewCharts` of a `ChartSource`, a `chartcache.Cache` or `StaticCharts`); the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`), `TreeFiles`, the files of a tree, and what reads them back (`ReadCompiled`, `ReadPublished`, `ReadArgoRoot`) |
 | `rules` | `Standard`, the standard rule set, `rules/v1` embedded ([the rule set](docs/specs/05_rules.md)) |
 | `treeedit` | the tree read (`ReadSources`, its readers) and its edits, each with its check (`Apply`, `Check.Verify`): an instance, a connection, a named claim, a project, `catalogs.yaml`, `projects.yaml` |
-| `chartcache` | the chart cache of the checks: the upstream charts pulled from OCI registries and https repositories |
+| `chartcache` | the chart cache of the checks, a `deploy.ChartSource`: the upstream charts pulled from OCI registries and https repositories |
 
 ([Go library](docs/01_usage.md#go-library))
 
@@ -238,7 +241,8 @@ re-derived all the same.
 | `catalog/` | the catalog repositories |
 | `internal/target/`, `internal/output/` | the targets (`helm`, `flux`, `argocd`), the files of a tree, the projects kept, what is withdrawn of them |
 | `internal/render/` | a chart rendered with its final values (Helm SDK), for the policy on what it deploys |
-| `internal/helmvalues/`, `internal/policy/` | the compiler's merge with the platform's policy: the upstream values and the ingress hosts |
+| `internal/helmvalues/`, `internal/policy/` | the compiler's merge with the checks against the charts and the platform's policy: the upstream values and the ingress hosts |
+| `internal/chartcheck/`, `internal/chartdir/` | the final values checked against the upstream charts, which the compiler does not read; the layout of a chart cache |
 | `internal/outdir/`, `internal/dirfs/` | the output directory of `okdp-compile`; the directories it reads, bounded |
 | `internal/buildinfo/` | the program's name and version |
 | `examples/` | six trees and what `okdp-compile` writes of them, byte for byte: `input/db/` is the real tree, whose `projects/<namespace>/instances/<instance>/` gives each instance its namespace and release |
@@ -256,23 +260,17 @@ documentation](https://github.com/OKDP/okdp-compiler/blob/main/docs/README.md)).
 
 ## Build
 
-okdp-gitops builds with Go 1.27 or later, against an okdp-compiler
-checkout next to this repository: `go.mod` replaces
-`github.com/okdp/okdp-compiler` with `../okdp-compiler` until okdp-compiler
-releases the API okdp-gitops uses (after v0.6.0), CI fetching it at the
-commit `OKDP_COMPILER_REF` of its workflows; the replace goes then,
-`go.mod` requiring that release
-([its releases](https://github.com/OKDP/okdp-compiler/releases)).
-`github.com/okdp/cel2yaml` is replaced the same way with a `../cel2yaml`
-checkout, until a release after v0.1.0, at the commit `OKDP_CEL2YAML_REF`
-of the workflows.
+okdp-gitops builds with Go 1.27 or later. `go.mod` requires a release of
+okdp-compiler ([its
+releases](https://github.com/OKDP/okdp-compiler/releases)), v0.8.0, and
+through it one of cel2yaml, downloaded as any other module.
 
 ```bash
 make build            # bin/okdp-gitops
 make build-compile    # bin/okdp-compile
 make check            # what CI runs: gofmt, vet, lint, tidy, build, race tests
 make help             # every target
-docker build --build-context okdp-compiler=../okdp-compiler --build-context cel2yaml=../cel2yaml -t okdp-gitops .
+docker build -t okdp-gitops .
 ```
 
 ## License

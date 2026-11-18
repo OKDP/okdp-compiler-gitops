@@ -26,15 +26,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # The commit of OKDP/okdp-compiler the image builds with: go.mod replaces
-  # github.com/okdp/okdp-compiler with ../okdp-compiler until it releases the
-  # API okdp-gitops uses (after v0.6.0). A full SHA, bumped by hand (the same
-  # as ci.yml's); the release replaces it, and the replace with it.
-  OKDP_COMPILER_REF: 5dce9b845812073154f1262ffba8a6c008290a50
-  # Likewise OKDP/cel2yaml, replaced with ../cel2yaml.
-  OKDP_CEL2YAML_REF: 9ceff0ff17d7ccb415edafa88b6959726faf1765
-
 jobs:
   build-push:
     runs-on: ubuntu-latest
@@ -46,19 +37,6 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      # A clone takes a branch or a tag, not a commit: init, fetch the commit.
-      - name: Fetch okdp-compiler next to the repository, at OKDP_COMPILER_REF
-        run: |
-          git init -q ../okdp-compiler
-          git -C ../okdp-compiler remote add origin https://github.com/OKDP/okdp-compiler.git
-          git -C ../okdp-compiler fetch -q --depth 1 origin "$OKDP_COMPILER_REF"
-          git -C ../okdp-compiler checkout -q FETCH_HEAD
-      - name: Fetch cel2yaml next to the repository, at OKDP_CEL2YAML_REF
-        run: |
-          git init -q ../cel2yaml
-          git -C ../cel2yaml remote add origin https://github.com/OKDP/cel2yaml.git
-          git -C ../cel2yaml fetch -q --depth 1 origin "$OKDP_CEL2YAML_REF"
-          git -C ../cel2yaml checkout -q FETCH_HEAD
       # The version, through the environment, never in the script: SemVer
       # (a leading "v" dropped), the whole string, else the job fails, the
       # input not printed. A comma, a newline or a space would add tags
@@ -85,9 +63,6 @@ jobs:
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
-          build-contexts: |
-            okdp-compiler=../okdp-compiler
-            cel2yaml=../cel2yaml
           platforms: linux/amd64,linux/arm64
           push: true
           cache-from: type=gha

@@ -21,7 +21,9 @@ import (
 	"helm.sh/helm/v3/pkg/releaseutil"
 
 	"github.com/okdp/okdp-compiler/chart"
+
 	"github.com/okdp/okdp-compiler/value"
+	"github.com/okdp/okdp-gitops/internal/chartdir"
 
 	"github.com/okdp/okdp-gitops/internal/yamldoc"
 )
@@ -36,7 +38,7 @@ const maxOutput = 64 << 20
 
 // Request: one key of an instance, what renders it.
 type Request struct {
-	Charts    fs.FS     // the chart cache: <Ref.Dir()>/ the chart unpacked whole
+	Charts    fs.FS     // the chart cache: <chartdir.Of(Ref)>/ the chart unpacked whole
 	Ref       chart.Ref // the chart
 	Key       string    // the key the chart renders under (its alias in the umbrella)
 	Values    map[string]any
@@ -143,7 +145,7 @@ func objects(r Request) ([]map[string]any, error) {
 // read: the files of the chart of ref in charts, each a loader's
 // BufferedFile named relative to the chart.
 func read(charts fs.FS, ref chart.Ref) ([]*loader.BufferedFile, error) {
-	dir, err := ref.Dir()
+	dir, err := chartdir.Of(ref)
 	if err != nil {
 		return nil, err
 	}

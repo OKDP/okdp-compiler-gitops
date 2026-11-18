@@ -19,18 +19,10 @@ The commands below run from the repository root, after `make build` and
 
 ### From a checkout
 
-okdp-gitops builds with Go 1.27 or later, against an okdp-compiler
-checkout next to it: `go.mod` replaces `github.com/okdp/okdp-compiler`
-with `../okdp-compiler` until okdp-compiler releases the API okdp-gitops
-uses (after v0.6.0). CI fetches it there at one commit, never a branch:
-`OKDP_COMPILER_REF` of `.github/workflows/ci.yml` and `build-image.yml`,
-a full SHA bumped by hand in both. The replace goes with that release,
-`go.mod` then requiring it, a version of
-[its releases](https://github.com/OKDP/okdp-compiler/releases) downloaded
-as any other module, and `OKDP_COMPILER_REF` with it.
-`github.com/okdp/cel2yaml` is replaced the same way with a `../cel2yaml`
-checkout, until a release after v0.1.0, at the commit `OKDP_CEL2YAML_REF`
-of the same workflows.
+okdp-gitops builds with Go 1.27 or later. `go.mod` requires a release of
+okdp-compiler, v0.8.0, one of
+[its releases](https://github.com/OKDP/okdp-compiler/releases), and
+through it one of cel2yaml, both downloaded as any other module.
 
 ```bash
 make build            # bin/okdp-gitops
@@ -46,10 +38,10 @@ make                  # every target
 overriding it; without it, the version Go records for the main module,
 else `dev`.
 
-Once the replace is gone, a newer okdp-compiler is taken with `go get`,
-the change of `go.mod` and `go.sum` committed, and a change of both
-modules builds against an okdp-compiler checkout through a Go workspace,
-which `.gitignore` keeps out of the commits:
+A newer okdp-compiler is taken with `go get`, the change of `go.mod` and
+`go.sum` committed, and a change of both modules builds against an
+okdp-compiler checkout through a Go workspace, which `.gitignore` keeps
+out of the commits:
 
 ```bash
 go get github.com/okdp/okdp-compiler@vX.Y.Z && go mod tidy
@@ -63,17 +55,11 @@ emulation, onto Alpine: `/usr/local/bin/okdp-gitops`, the entrypoint, run
 as the user 65534, with `HOME=/tmp` and the CA certificates:
 
 ```bash
-docker build --build-context okdp-compiler=../okdp-compiler --build-context cel2yaml=../cel2yaml \
-  --build-arg VERSION=1.2.3 -t okdp-gitops .
+docker build --build-arg VERSION=1.2.3 -t okdp-gitops .
 ```
 
-The build context `okdp-compiler` is the checkout `go.mod` replaces the
-module with, until its release ([from a checkout](#from-a-checkout)),
-the build-image workflow's at `OKDP_COMPILER_REF`: the image copies its
-`go.mod`, the packages okdp-gitops imports (the module root, `chart/`,
-`value/`) and `internal/`. The build context `cel2yaml` is likewise the
-checkout at `OKDP_CEL2YAML_REF`, of which the image copies the `go.mod`,
-the module root and `value/`. The image holds `okdp-gitops` only:
+okdp-compiler and cel2yaml are downloaded at the releases `go.mod`
+requires. The image holds `okdp-gitops` only:
 `okdp-compile` is built from a checkout, or from the archives of
 `.goreleaser.yaml` once a release publishes them.
 
@@ -117,7 +103,7 @@ Flags take one or two dashes, and a value as the next argument or after
 | `--tree` | none | with `--output`: a local directory of the sources, `platform.yaml`, `catalogs.yaml`, `projects/`, read ([local directories](specs/04_topology.md#local-directories)) |
 | `--output` | none | with `--tree`: a local directory of the output, `compiled/`, `argocd/`, written in place; never the directory of `--tree` |
 | `--catalog` | none | `NAME=DIR`: the catalog `NAME` of `catalogs.yaml` read from a local directory instead of its URL; repeatable ([`--catalog`](#--catalog)) |
-| `--charts` | none | a chart cache directory: the upstream charts of the compiled instances pulled there, and the values checked against them ([`--charts`](#--charts)) |
+| `--charts` | none | a chart cache directory: the upstream charts of the instances pulled there, and the values checked against them ([`--charts`](#--charts)) |
 | `--check` | | write nothing; fail when a compiled file is not up to date ([`--check`](#--check)) |
 | `--path-prefix` | the topology's output path; with `--output`, the directory's path in its Git repository | the path of the output in its Git repository, for the paths the engines read ([`--path-prefix`](#--path-prefix)) |
 | `--timeout` | `10m` | the bound of the whole run (a Go duration, above 0): the fetches and pushes of every repository, the catalogs, the charts, the compiles again; past it, the run fails, `okdp-gitops: timed out after <duration> (--timeout)`, nothing pushed that was not |
@@ -141,8 +127,9 @@ A compile:
    last commit, and compiles the tree with
    okdp-compiler, the standard rule set given (`deploy.Build`):
    `compiler.LoadRepository` of its parts (`catalogs.yaml` among them,
-   its menu checked against the catalogs) and the catalogs, `CompileTree`
-   ([the compile](specs/02_compile.md));
+   its menu checked against the catalogs) and the catalogs, with
+   `--charts` the upstream charts fetched, `CompileTree`, the final
+   values checked against the charts ([the compile](specs/02_compile.md));
 4. writes `compiled/` again: the files of the Flux target and, with an
    `argocd/root.yaml`, of the Argo CD target
    ([the output](specs/03_output.md)); and `sources.yaml`, the revisions
@@ -273,11 +260,17 @@ another); one of another host anonymously
 
 ### --charts
 
-`--charts DIR`, a chart cache: the upstream charts the instances compile
-to are pulled into it, anonymously, from their OCI registries or https
-chart repositories, then the tree compiled again with them: the values of
-each instance, over each chart's defaults, must meet the chart's
-`values.schema.json` ([the steps](specs/02_compile.md#the-steps)); a chart
+`--charts DIR`, a chart cache: the upstream charts the instances name in
+their `Chart.yaml` are pulled into it, anonymously, from their OCI
+registries or https chart repositories, once the tree loads and before
+any instance compiles, then the tree compiled once: the final values of
+each instance, coalesced over each chart's defaults as Helm coalesces
+them, must meet the chart's `values.schema.json`, and a list it appended
+to that lacks items of the chart's default list is a warning
+([the steps](specs/02_compile.md#the-steps)). These checks are
+okdp-gitops', not okdp-compiler's, which reads no upstream chart; a
+`$ref` of a schema to a URL or a file is never fetched, and a chart's
+subcharts are not checked; a chart
 an instance gives upstream values to is rendered and its manifests
 checked ([the render](specs/05_rules.md#the-render)); each chart the
 compile checked is vendored in the umbrella, `charts/<chart>-<version>.tgz`,
@@ -604,14 +597,23 @@ link fails, even with `--force`.
 `--check` compiles as `-o` does and writes nothing; it takes no `-o`.
 With `--charts <dir>` (`$OKDP_CHARTS` by default), each upstream chart
 the instances render is read from a chart cache, its `values.yaml` and
-`values.schema.json`, nothing else of it:
+`values.schema.json`, nothing else of it, its subcharts' neither; the
+cache is read as it is, nothing pulled (`deploy.StaticCharts`). These
+checks are okdp-gitops' (`internal/chartcheck`): okdp-compiler reads no
+upstream chart.
 
 - the final values of each key, coalesced over the chart's defaults as
-  Helm coalesces them, must meet its `values.schema.json`: a violation
-  is an error, those of every key reported together;
+  Helm coalesces them (Helm's `chartutil.CoalesceValues`), an empty
+  `global` added, must meet its `values.schema.json`: a violation is an
+  error, those of every key reported together; a `$ref` of the schema
+  to a URL or a file is never fetched;
 - an instance list appended to where the chart's defaults hold a list
   some item of which the final list lacks is a warning: the package
-  restates the items it keeps.
+  restates the items it keeps;
+- a chart the cache lacks fails the instance, `<key>: chart
+  <chart>-<version> is not in the chart cache: helm pull ...`, the
+  command that unpacks it there, `<chart cache>` standing for the
+  directory (the catalogs' `scripts/compile-charts.sh` runs it).
 
 The final values are the same with or without the chart cache. The full
 example's chart cache, `examples/03_full/.charts/`, holds the charts of
@@ -913,14 +915,28 @@ applies an edit and its check, and commits the change.
 |---|---|
 | `gitops` | the stores: `Store` (`View`, a `treeedit.Reader`; `Update`, a `Tx`, a `treeedit.Writer`), `GitStore` (a Git remote, go-git), `MemoryStore`, `Repositories` (the parts of a `Topology`); `Credentials`: the credentials of the repositories, the catalogs and the Forgejo API, the `http://` hosts allowed; `Compiler`: the compile of the tree a store holds (`SkipRender`: no render of the charts, for a long-running process; [the render](specs/05_rules.md#the-render)); `Deployments`: the edits of `treeedit` committed (`Apply`, a method per edit), the reads of the tree and of the output through `treeedit`, the output (`WriteCompiled`); `ForgejoClient`; the workflow of the output (`OutputWorkflow`) |
 | `catalog` | the catalogs of `catalogs.yaml` (each a `treeedit.CatalogRepository`): `Loader` (Git repositories at their ref, local directories), `Catalogs`, indexed by okdp-compiler (`Index`, a `compiler.Catalog`: services, versions, packages, contracts) |
-| `deploy` | `Build`: `compiler.Build` with the standard rule set, Helm's merge and the policy, each unless the caller gives another (`WithoutRender`: the same `Finalize`, the charts not rendered); the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`); `TreeFiles`: the files of a tree; `Write`: those of one compile for a plain `helm install`; `ReadCompiled`, `ReadPublished`, `ReadArgoRoot`, `ProjectAccess`, `CheckReleases` |
+| `deploy` | `Build(ctx, repos, BuildOptions)`: `compiler.Build` with the standard rule set, Helm's merge and the policy, each unless the caller gives another, the final values checked against the upstream charts of `BuildOptions.Charts` (`SkipRender`: the same `Finalize`, the charts not rendered); `ChartSource` (a `chartcache.Cache`, or `StaticCharts(fsys)`, a directory filled already), `NewCharts(src)`, the `Charts` of one build (`Failures`, `FS`); `CoalesceValues(values, defaults)`: values over a chart's defaults as Helm coalesces them; the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`); `TreeFiles(t, targets, previous, charts)`: the files of a tree; `Write`: those of one compile for a plain `helm install`; `ReadCompiled`, `ReadPublished`, `ReadArgoRoot`, `ProjectAccess`, `CheckReleases` |
 | `rules` | `Standard`: the standard rule set ([the rule set](specs/05_rules.md)) |
 | `treeedit` | the tree read, its edits and their checks: `Reader`, `Writer`, `Apply`, `Check.Verify`, `ReadSources`, `OutputTargets`, `OutputFS`, `WriteOutput` |
-| `chartcache` | the chart cache of the checks: `NewCache`, `NewRepositoryPuller`, set as `Compiler.Charts` |
+| `chartcache` | the chart cache of the checks, a `deploy.ChartSource` (`Get` pulls a chart it lacks, `FS` gives them): `NewCache`, `NewRepositoryPuller`, set as `Compiler.Charts` |
 
 A program that calls `compiler.Build` itself, without `deploy.Build`,
 compiles with okdp-compiler's mandatory rules alone: no namespace, object,
-upstream or host policy.
+upstream or host policy, and no check against the upstream charts, which
+okdp-compiler does not read.
+
+`deploy.Build` with `BuildOptions.Charts` fetches the upstream charts of
+every `Chart.yaml` of the tree once the tree loads, before any instance
+compiles (`compiler.BuildOptions.Loaded`, which it chains to the
+caller's): no fetch counts against `InstanceTimeout`. A `Charts`
+(`deploy.NewCharts`) serves one build: each chart fetched once, read
+once, its schema compiled once; a fetch the context ends is not recorded
+as a failure. `Charts.Failures` says why each chart that could not be
+fetched could not be: the keys it renders are unchecked. `deploy.Build`
+replaces `compiler.BuildOptions` in its signature, and `SkipRender`
+replaces `deploy.WithoutRender()`; okdp-compiler no longer has
+`Inputs.Charts`, `CompileTree`'s chart source, `StaticCharts`,
+`ChartFailures` nor `CoalesceValues`: they are `deploy`'s.
 
 The test tree, compiled in memory, as `okdp-gitops compile` compiles it,
 then changed as the control plane changes it (run from the repository
@@ -1036,7 +1052,10 @@ okdp: compile
   `Compiler.Compile` runs on a copy of the tree, no lock of a store
   held; compiles of the same files and catalog revisions at once are
   one compile, which they share, then kept (8 trees), but a tree
-  compiled without the chart checks (`ChartFailures`).
+  compiled without the chart checks (a chart that could not be fetched:
+  `Charts.Failures` of its build, logged per chart and per instance
+  key). Each compile gets its own `deploy.NewCharts` of
+  `Compiler.Charts`, a `deploy.ChartSource`.
 - `NewRepositories(topology, open)` routes the paths of the tree to the
   store of each part's repository, `open` giving the store of a location
   ([the control plane's commits](specs/04_topology.md#the-control-planes-commits)).
@@ -1082,9 +1101,9 @@ okdp: compile
   the function `CheckInsecureHTTP`.
 - `Compiler.Compile(ctx, reader)` compiles the tree a reader holds
   ([the compile](specs/02_compile.md)): a `*compiler.Tree`
-  (`compiler.CompileTree`), each `compiler.TreeInstance` with its
-  directory (`Name`), its project (`Namespace()`), its release
-  (`Release()`), its package (`Definition`, `Provisions`), its outcome
+  (`deploy.Build`, `compiler.CompileTree`), each
+  `compiler.TreeInstance` with its directory (`Name`), its project
+  (`Namespace()`), its release (`Release()`), its package (`Definition`, `Provisions`), its outcome
   (`Outcome`: the result, why it is refused, its claims bound), the
   problem of the graph at its release (`GraphErr`), the claims bound to
   it as a provider (`Provided`, each with its `Claimer`, and what it
@@ -1167,6 +1186,8 @@ okdp-gitops' own:
 | `service "webapp" is in the catalog of no repository` | `instance.yaml` names a service no catalog has, or `catalogs.yaml` names no repository | fix `service`; name the catalogs ([catalogs.yaml](specs/01_layout.md#catalogsyaml)) |
 | `version "2.0.0" of service "webapp" is not in test-charts/catalog/webapp` | a version the catalog does not have, at its ref | fix `version`; check the catalog's `ref`, or `--catalog` |
 | `compiled values don't meet the specifications of the schema(s) in the following chart(s):` then `app (app-1.8.0):` and `- at '/database': got object, want string` | `--charts`: the values, over the chart's defaults, violate its `values.schema.json` | fix the instance's parameters or upstream values; else the package |
+| `<key>: chart app-1.8.0 is not in the chart cache: helm pull ... --untar -d <chart cache>/...` | `okdp-compile --check --charts`: the cache, read as it is, lacks the chart | run the command, `<chart cache>` the directory of `--charts` |
+| `upstream.<key>.<path>: appended to the package's list, not to the default list of ..., which Helm replaces: ...` (warning) | `--charts`: an instance appended to a list whose final list lacks items of the chart's default list | restate them in the package's values, as the warning says |
 | `A chart could not be fetched: ...`, `Compiled without the checks against this chart: ...` (warnings); `upstream.<key>: the chart ... could not be fetched` | `--charts`: a chart that cannot be pulled anonymously, a private repository, no network; a plain-http registry not in `$GITOPS_INSECURE_CHART_HOSTS` | the instance's other charts compile; a project that is not privileged giving it upstream values is refused; put the chart in the cache by hand (`helm pull -d <dir>/<repository>/<chart>-<version>/`: the `.tgz` beside the chart, unpacked with `--untar`) |
 | `okdp-gitops: catalog platform-charts (https://git.example.org/okdp/platform-charts.git@main): fetching the catalog: authentication required` | a catalog that cannot be fetched: its URL, its credentials (those of `$GITOPS_CREDENTIALS_DIR`, else `$GITOPS_TOKEN`, on the platform repository's host only) | fix the URL or the credentials, or `--catalog platform-charts=<dir>` |
 | `... ref v1.2: no such branch, tag or commit`, `commit <hash> is not on a branch or a tag of the repository` | a catalog `ref` the repository does not have | fix `ref` |

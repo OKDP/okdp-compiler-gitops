@@ -230,11 +230,10 @@ func TestTheCacheUnpacksTheChartsOfTheirRepositories(t *testing.T) {
 		t.Errorf("the chart directory, not readable by every user: %v, %v", info, err)
 	}
 
-	fsys, failures := cache.Ensure(t.Context(), []compiler.ChartRef{ref})
-	if failures != nil {
-		t.Fatal(failures)
+	if err := cache.Get(t.Context(), ref); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := fs.Stat(fsys, chartDir+"/values.yaml"); err != nil {
+	if _, err := fs.Stat(cache.FS(), chartDir+"/values.yaml"); err != nil {
 		t.Error(err)
 	}
 	if pulls != 1 {
@@ -242,8 +241,8 @@ func TestTheCacheUnpacksTheChartsOfTheirRepositories(t *testing.T) {
 	}
 
 	missing := compiler.ChartRef{Repository: repo.URL + "/charts", Chart: "app", Version: "9.9.9"}
-	if _, failures := cache.Ensure(t.Context(), []compiler.ChartRef{ref, missing}); failures[missing] == nil || failures[ref] != nil {
-		t.Errorf("a chart that cannot be pulled: %v", failures)
+	if err := cache.Get(t.Context(), missing); err == nil {
+		t.Error("a chart that cannot be pulled: pulled")
 	}
 	if _, err := cache.File(t.Context(), missing, "values.yaml"); err == nil || !strings.Contains(err.Error(), "a moment ago") {
 		t.Errorf("not tried again at once: %v", err)
@@ -384,7 +383,8 @@ func TestEachChartHasItsBudget(t *testing.T) {
 	chart("charts.example.org", "hello", "x: y\n")
 	service("hello", "hello", "charts.example.org")
 	tree["projects/victim/instances/web/instance.yaml"] = &fstest.MapFile{Data: []byte("service: hello\nversion: 1.0.0\n")}
-	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, compiler.BuildOptions{Charts: NewCache(dir, nil)})
+	charts := deploy.NewCharts(NewCache(dir, nil))
+	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{Charts: charts})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,8 +393,8 @@ func TestEachChartHasItsBudget(t *testing.T) {
 			t.Errorf("%s/%s: %v", ti.Namespace(), ti.Name, err)
 		}
 	}
-	if tr.ChartFailures != nil {
-		t.Errorf("charts: %v", tr.ChartFailures)
+	if failures := charts.Failures(); failures != nil {
+		t.Errorf("charts: %v", failures)
 	}
 }
 
@@ -491,5 +491,5 @@ func TestIndexIsHTTPS(t *testing.T) {
 	}
 }
 
-// Cache is a compiler.ChartSource.
-var _ compiler.ChartSource = (*Cache)(nil)
+// Cache is a deploy.ChartSource.
+var _ deploy.ChartSource = (*Cache)(nil)

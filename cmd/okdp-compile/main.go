@@ -159,8 +159,8 @@ func checkReport(o options) error {
 // compileTree: the tree the repositories make together
 // (deploy.Build), each directory read bounded, no symbolic link
 // followed (openDir), each instance within --cost-limit and with
-// --allow-plain-secrets, the chart cache of --check --charts set
-// (compiler.StaticCharts), all within --timeout (past it, an error,
+// --allow-plain-secrets, the final values checked against the chart cache
+// of --check --charts (deploy.StaticCharts), all within --timeout (past it, an error,
 // nothing printed of the instances); each claim's binding printed,
 // <namespace>/<release>: <field>: claim <id> (<contract>) bound to
 // <namespace>/<release>, then ", class <class>" for the class it names,
@@ -239,7 +239,7 @@ func compileTree(o options, rep *report) error {
 		return err
 	}
 	defer closePrevious()
-	files, kept, err := deploy.TreeFiles(t, []deploy.Target{tg}, previous)
+	files, kept, err := deploy.TreeFiles(t, []deploy.Target{tg}, previous, in.chartsFS())
 	if err != nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func checkOptions(o options) error {
 // inputs: the repositories and the chart cache the command reads, open.
 type inputs struct {
 	repos   []compiler.Repository
-	charts  compiler.ChartSource // nil without --charts
+	charts  deploy.ChartSource // nil without --charts
 	closers []func()
 }
 
@@ -297,7 +297,7 @@ func (in *inputs) close() {
 }
 
 // openInputs: the directories of --repository and --catalog (openDir) and
-// of --charts (dirfs.NewCharts, compiler.StaticCharts) open; the ones
+// of --charts (dirfs.NewCharts, deploy.StaticCharts) open; the ones
 // opened closed when another fails.
 func openInputs(o options) (*inputs, error) {
 	in := &inputs{}
@@ -317,9 +317,17 @@ func openInputs(o options) (*inputs, error) {
 			return nil, err
 		}
 		in.closers = append(in.closers, fsys.Close)
-		in.charts = compiler.StaticCharts(fsys)
+		in.charts = deploy.StaticCharts(fsys)
 	}
 	return in, nil
+}
+
+// chartsFS: the charts of --charts, nil without it.
+func (in *inputs) chartsFS() fs.FS {
+	if in.charts == nil {
+		return nil
+	}
+	return in.charts.FS()
 }
 
 // buildTree: the tree of the repositories compiled (deploy.Build) within
@@ -333,7 +341,10 @@ func buildTree(o options, in *inputs, rep *report) (*compiler.Tree, error) {
 		ctx, cancel = context.WithTimeout(ctx, o.timeout)
 		defer cancel()
 	}
-	t, err := deploy.Build(ctx, in.repos, compiler.BuildOptions{CostLimit: o.costLimit, InstanceTimeout: o.instanceTimeout, AllowPlainSecrets: o.allowPlainSecrets, Charts: in.charts})
+	t, err := deploy.Build(ctx, in.repos, deploy.BuildOptions{
+		BuildOptions: compiler.BuildOptions{CostLimit: o.costLimit, InstanceTimeout: o.instanceTimeout, AllowPlainSecrets: o.allowPlainSecrets},
+		Charts:       deploy.NewCharts(in.charts),
+	})
 	if err != nil {
 		return nil, err
 	}

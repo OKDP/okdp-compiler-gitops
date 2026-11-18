@@ -17,20 +17,8 @@ ARG VERSION=dev
 
 WORKDIR /workspace/okdp-gitops
 
-# go.mod replaces github.com/okdp/okdp-compiler with ../okdp-compiler until it
-# releases the API okdp-gitops uses (after v0.6.0), and github.com/okdp/cel2yaml
-# with ../cel2yaml likewise (after v0.1.0): build with --build-context
-# okdp-compiler=../okdp-compiler --build-context cel2yaml=../cel2yaml, checkouts
-# of the commits CI pins (OKDP_COMPILER_REF, OKDP_CEL2YAML_REF). The packages
-# okdp-gitops imports: of okdp-compiler the module root (compiler.go), chart/
-# and value/, their implementation internal/; of cel2yaml the module root and
-# value/.
-COPY --from=okdp-compiler go.mod go.sum *.go ../okdp-compiler/
-COPY --from=okdp-compiler chart/ ../okdp-compiler/chart/
-COPY --from=okdp-compiler value/ ../okdp-compiler/value/
-COPY --from=okdp-compiler internal/ ../okdp-compiler/internal/
-COPY --from=cel2yaml go.mod go.sum *.go ../cel2yaml/
-COPY --from=cel2yaml value/ ../cel2yaml/value/
+# okdp-compiler and cel2yaml are modules of go.mod like any other,
+# downloaded at the releases it requires.
 COPY go.* ./
 RUN go mod download
 

@@ -4,15 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-gitops/deploy"
 	"github.com/okdp/okdp-gitops/treeedit"
 
 	"github.com/okdp/okdp-gitops/catalog"
@@ -66,7 +69,7 @@ func TestReadsAndWritesDoNotWaitOnASlowCompile(t *testing.T) {
 	var builds atomic.Int32
 	started, release, waiting := make(chan struct{}, 4), make(chan struct{}), make(chan struct{}, 4)
 	c := NewCompiler(&catalog.Loader{})
-	c.build = func(ctx context.Context, _ []compiler.Repository, _ compiler.BuildOptions) (*compiler.Tree, error) {
+	c.build = func(ctx context.Context, _ []compiler.Repository, _ deploy.BuildOptions) (*compiler.Tree, error) {
 		builds.Add(1)
 		started <- struct{}{}
 		select {
@@ -454,6 +457,14 @@ func commitsOf(t *testing.T, url, subject string) int {
 	return n
 }
 
+// unreachable: a chart source that can fetch no chart.
+type unreachable struct{}
+
+func (unreachable) Get(context.Context, compiler.ChartRef) error {
+	return errors.New("chart unreachable")
+}
+func (unreachable) FS() fs.FS { return fstest.MapFS{} }
+
 // A tree compiled without the checks against the upstream charts (a chart
 // that could not be fetched) is not kept: the next compile of the same
 // files tries again, and the one that is checked is.
@@ -462,21 +473,25 @@ func TestATreeCompiledWithoutTheChartChecksIsNotKept(t *testing.T) {
 	s, _ := seedStore(t, map[string]string{"platform.yaml": "global: {}\n", "projects/demo/project.yaml": "{}\n"})
 	builds := 0
 	c := NewCompiler(&catalog.Loader{})
-	c.build = func(context.Context, []compiler.Repository, compiler.BuildOptions) (*compiler.Tree, error) {
+	c.Charts = unreachable{}
+	c.build = func(ctx context.Context, _ []compiler.Repository, o deploy.BuildOptions) (*compiler.Tree, error) {
 		builds++
 		if builds <= 2 {
-			return &compiler.Tree{ChartFailures: map[compiler.ChartRef]error{{Repository: "oci://r", Chart: "c", Version: "1"}: errors.New("chart unreachable")}}, nil
+			// The compile names a chart the source cannot fetch.
+			if err := o.Charts.Fetch(ctx, []compiler.ChartRef{{Repository: "oci://r", Chart: "c", Version: "1"}}); err != nil {
+				return nil, err
+			}
 		}
 		return &compiler.Tree{}, nil
 	}
 	d := &Deployments{Store: s, Compiler: c}
 	for i := 1; i <= 2; i++ {
-		if tree, err := d.Tree(ctx); err != nil || tree.ChartFailures == nil || builds != i {
+		if tree, err := d.Tree(ctx); err != nil || tree == nil || builds != i {
 			t.Fatalf("compile %d: %d builds, %v, %v: want a build each time", i, builds, tree, err)
 		}
 	}
 	checked, err := d.Tree(ctx)
-	if err != nil || checked.ChartFailures != nil || builds != 3 {
+	if err != nil || builds != 3 {
 		t.Fatalf("the third compile: %d builds, %v, %v", builds, checked, err)
 	}
 	if again, err := d.Tree(ctx); err != nil || again != checked || builds != 3 {

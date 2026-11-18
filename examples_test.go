@@ -18,6 +18,7 @@ import (
 	"github.com/okdp/okdp-compiler/chart"
 
 	"github.com/okdp/okdp-gitops/deploy"
+	"github.com/okdp/okdp-gitops/internal/chartcheck"
 	"github.com/okdp/okdp-gitops/internal/helmvalues"
 	"github.com/okdp/okdp-gitops/internal/policy"
 	"github.com/okdp/okdp-gitops/rules"
@@ -41,7 +42,7 @@ func load(t *testing.T, example string) []compiler.Instance {
 		t.Fatal(err)
 	}
 	for i := range instances {
-		instances[i].Inputs.Rules, instances[i].Inputs.Finalize = rules.Standard(), helmvalues.New()
+		instances[i].Inputs.Rules, instances[i].Inputs.Finalize = rules.Standard(), helmvalues.New(nil)
 		instances[i].Inputs.CheckGlobals = policy.CheckGlobals
 	}
 	return instances
@@ -101,8 +102,9 @@ func TestExample(t *testing.T) {
 			if !exists(t, charts) {
 				return
 			}
+			finalize := helmvalues.New(chartcheck.New(chartcheck.Static(os.DirFS(charts))))
 			for i := range instances {
-				instances[i].Inputs.Charts = os.DirFS(charts)
+				instances[i].Inputs.Finalize = finalize
 			}
 			checked, checkedWarnings := compileTree(t, instances)
 			if !maps.EqualFunc(checked, files, bytes.Equal) || !slices.Equal(checkedWarnings, warnings) {

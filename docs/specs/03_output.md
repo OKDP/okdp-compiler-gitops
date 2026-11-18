@@ -123,7 +123,8 @@ Flux target writes for the projects written and the kept ones whose
 none of its releases. Kept, but not whole: an instance refused today
 whose output in the kept directory today's platform policy refuses on
 its own (the value a platform has since denied, a host, an object the
-render of its kept values now refuses) is withdrawn: its directory is not
+render of its kept values now refuses, with a chart cache only: the
+charts `deploy.TreeFiles` is given) is withdrawn: its directory is not
 kept, the engines prune it, a problem of the project says so. An instance
 refused for what its author just wrote keeps what runs: the check is on
 what is deployed, not on the refusal (`output.Files`, `withdraw`). Only

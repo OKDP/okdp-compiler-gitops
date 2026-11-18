@@ -1,10 +1,8 @@
 # CI: on each pull request and push to main, the checks of `make check`:
 # lint (gofmt, go vet, golangci-lint at the version tools/go.mod pins,
 # go.mod and tools/go.mod tidy) and test (the CLI built, the tests with the
-# race detector), and govulncheck. go.mod replaces okdp-compiler with
-# ../okdp-compiler until it releases the API okdp-gitops uses (after
-# v0.6.0): each job fetches it there, at the commit OKDP_COMPILER_REF, and
-# cel2yaml likewise, replaced with ../cel2yaml, at OKDP_CEL2YAML_REF.
+# race detector), and govulncheck. okdp-compiler and cel2yaml are modules
+# of go.mod, downloaded at the releases it requires.
 name: ci
 
 on:
@@ -21,12 +19,6 @@ concurrency:
 
 env:
   GOVULNCHECK_VERSION: v1.8.0   # needs Go 1.26 or later; go.mod is on 1.27 (okdp-compiler's)
-  # The commit of OKDP/okdp-compiler the jobs build with, a full SHA bumped by
-  # hand (the same as build-image.yml's); its release replaces it, and the
-  # replace of go.mod with it.
-  OKDP_COMPILER_REF: 5dce9b845812073154f1262ffba8a6c008290a50
-  # Likewise OKDP/cel2yaml, replaced with ../cel2yaml.
-  OKDP_CEL2YAML_REF: 9ceff0ff17d7ccb415edafa88b6959726faf1765
 
 jobs:
   lint:
@@ -36,18 +28,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Fetch okdp-compiler next to the repository, at OKDP_COMPILER_REF
-        run: |
-          git init -q ../okdp-compiler
-          git -C ../okdp-compiler remote add origin https://github.com/OKDP/okdp-compiler.git
-          git -C ../okdp-compiler fetch -q --depth 1 origin "$OKDP_COMPILER_REF"
-          git -C ../okdp-compiler checkout -q FETCH_HEAD
-      - name: Fetch cel2yaml next to the repository, at OKDP_CEL2YAML_REF
-        run: |
-          git init -q ../cel2yaml
-          git -C ../cel2yaml remote add origin https://github.com/OKDP/cel2yaml.git
-          git -C ../cel2yaml fetch -q --depth 1 origin "$OKDP_CEL2YAML_REF"
-          git -C ../cel2yaml checkout -q FETCH_HEAD
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -77,18 +57,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Fetch okdp-compiler next to the repository, at OKDP_COMPILER_REF
-        run: |
-          git init -q ../okdp-compiler
-          git -C ../okdp-compiler remote add origin https://github.com/OKDP/okdp-compiler.git
-          git -C ../okdp-compiler fetch -q --depth 1 origin "$OKDP_COMPILER_REF"
-          git -C ../okdp-compiler checkout -q FETCH_HEAD
-      - name: Fetch cel2yaml next to the repository, at OKDP_CEL2YAML_REF
-        run: |
-          git init -q ../cel2yaml
-          git -C ../cel2yaml remote add origin https://github.com/OKDP/cel2yaml.git
-          git -C ../cel2yaml fetch -q --depth 1 origin "$OKDP_CEL2YAML_REF"
-          git -C ../cel2yaml checkout -q FETCH_HEAD
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod

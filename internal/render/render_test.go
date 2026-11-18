@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"github.com/okdp/okdp-compiler/chart"
+
+	"github.com/okdp/okdp-gitops/internal/chartdir"
 )
 
 // chartFS: a chart cache holding files under the chart directory of ref.
 func chartFS(ref chart.Ref, files map[string]string) fstest.MapFS {
-	dir, err := ref.Dir()
+	dir, err := chartdir.Of(ref)
 	if err != nil {
 		panic(err)
 	}

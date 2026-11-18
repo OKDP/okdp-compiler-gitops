@@ -33,30 +33,43 @@ plane.
    part in two repositories) is a `*compiler.LoadError`, okdp-compiler's,
    listing every one, each naming its file: the tree
    compiles no instance.
-4. **The compile.** `compiler.CompileTree` of every instance, each claim
+4. **The charts.** With a chart source (`--charts`, the control plane's
+   chart cache: `deploy.BuildOptions.Charts`), the upstream charts of
+   every instance that loaded, those its `Chart.yaml` names, are fetched
+   before any instance compiles (`compiler.BuildOptions.Loaded`), each
+   once for the build (`deploy.Charts`): no fetch counts against an
+   instance's timeout. okdp-compiler reads no upstream chart: the checks
+   against them are okdp-gitops'. A chart that cannot be fetched is
+   recorded (`Charts.Failures`), and the instances naming it compile
+   without the checks of that chart, the others checked, with a warning
+   per chart and per instance key; the control plane does not keep such
+   a tree, the next compile of the same files tries the charts again.
+5. **The compile.** `compiler.CompileTree` of every instance, each claim
    bound to its provider, of any namespace, each instance after those it
    depends on, with what they publish; each instance's CEL cost bounded
    (1 000 000, `gitops.DefaultCostLimit`). An instance refused is the
-   tree's answer, its outcome's error.
-5. **The charts.** With a chart cache (`--charts`, the control plane's),
-   the `compiler.ChartSource` of `CompileTree`, the upstream charts of
-   the compiled instances are pulled into it, then every instance
-   compiled again with it: its values, over each chart's defaults, must
-   meet the chart's `values.schema.json`. A chart that cannot be pulled
-   leaves the instances naming it compiled without the checks of that
-   chart, the others checked, with a warning per chart and per instance
-   (`Tree.ChartFailures`, `TreeInstance.ChartFailures`); the control
-   plane does not keep such a tree, the next compile of the same files
-   tries the charts again. An instance of a project that is not privileged
-   that gives upstream values to a chart that could not be fetched is
-   refused, alone: nothing can check what it would deploy.
+   tree's answer, its outcome's error. Its final values, merged by
+   okdp-compiler as Helm merges them (`compiler.FinalValues`), are
+   checked by okdp-gitops against the chart of each key
+   (`helmvalues.New`, `internal/chartcheck`): coalesced over the chart's
+   `values.yaml` by Helm's `chartutil.CoalesceValues`, an empty `global`
+   added, they must meet the chart's `values.schema.json` (the
+   violations of every key reported together, the chart's own files
+   only, not its subcharts'; a `$ref` to a URL or a file never fetched);
+   a list the instance appended to that lacks items of the chart's
+   default list is a warning. Then the platform's policy. An instance of
+   a project that is not privileged that gives upstream values to a
+   chart that could not be fetched is refused, alone, by a compile that
+   renders (`helmvalues.CheckRendered`): nothing can check what it would
+   deploy.
    A chart key given upstream values, of such a project, is rendered with
    its final values and its manifests checked (the render, [the
    rules](05_rules.md#the-render)); the rendered output is never written.
    The CI's compile renders, always; the control plane's checks do not
-   (`Compiler.SkipRender`).
+   (`Compiler.SkipRender`, `deploy.BuildOptions.SkipRender`).
    Each instance's compile is bounded (`--instance-timeout`, the CI's
-   `gitops.DefaultInstanceTimeout`, one minute), its charts included.
+   `gitops.DefaultInstanceTimeout`, one minute), its checks and its
+   render included, the fetch of its charts not.
 6. **The graph.** `CompileTree`'s, of the instances that compiled: a
    release waits for those it depends on, of its namespace or, for a
    claim, of its provider's. A problem of the graph (a dependency on a
@@ -134,7 +147,9 @@ provisioned, while the kept output still uses it. A change of the claims
 of a project is best committed apart from a change that may break it.
 
 The compile's messages are okdp-compiler's, their causes and fixes in its
-[troubleshooting](https://github.com/OKDP/okdp-compiler/blob/main/docs/01_usage.md#troubleshooting).
+[troubleshooting](https://github.com/OKDP/okdp-compiler/blob/main/docs/01_usage.md#troubleshooting),
+but those of the checks against the upstream charts, okdp-gitops'
+([troubleshooting](../01_usage.md#troubleshooting)).
 
 ## What a write of the control plane checks
 

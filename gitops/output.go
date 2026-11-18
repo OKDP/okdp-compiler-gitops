@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/okdp/okdp-gitops/deploy"
+	"io/fs"
 	"log/slog"
 	"strings"
 
@@ -53,7 +54,7 @@ func (d *Deployments) WriteCompiled(ctx context.Context, tx Tx) ([]compiler.Kept
 	if err != nil {
 		return nil, err
 	}
-	files, kept, err := deploy.TreeFiles(tree, targets, treeedit.OutputFS(tx))
+	files, kept, err := deploy.TreeFiles(tree, targets, treeedit.OutputFS(tx), d.chartsFS())
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +86,15 @@ func (d *Deployments) chartArchives(ctx context.Context) deploy.ChartArchives {
 		return nil
 	}
 	return func(ref chart.Ref) ([]byte, string, error) { return a.Archive(ctx, ref) }
+}
+
+// chartsFS: the charts of the Compiler's chart source, what the
+// withdrawal of a refused instance renders; nil without a source.
+func (d *Deployments) chartsFS() fs.FS {
+	if d.Compiler.Charts == nil {
+		return nil
+	}
+	return d.Compiler.Charts.FS()
 }
 
 // outputPrefix is the directory of the output in its repository: the

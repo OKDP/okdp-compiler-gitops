@@ -1,9 +1,9 @@
 // Package chartcache keeps a chart cache: the upstream charts the compiled
 // instances name, pulled from their own repositories (OCI registries,
-// https chart repositories) and unpacked whole in okdp-compiler's layout,
-// for the checks of a compile (compiler.Inputs.Charts), the render of its
-// policy and the chart defaults the console shows, with the archive as it
-// was pulled, which the umbrella of an instance vendors (Archive):
+// https chart repositories) and unpacked whole, for the checks of a
+// compile against them (deploy.Charts), the render of its policy and the
+// chart defaults the console shows, with the archive as it was pulled,
+// which the umbrella of an instance vendors (Archive):
 //
 //	<dir>/<repository without scheme>/<chart>-<version>/<chart>/             the chart unpacked: Chart.yaml, values.yaml, templates/...
 //	<dir>/<repository without scheme>/<chart>-<version>/<chart>-<version>.tgz  its archive
@@ -34,6 +34,7 @@ import (
 
 	"github.com/okdp/okdp-compiler/chart"
 	"github.com/okdp/okdp-compiler/value"
+	"github.com/okdp/okdp-gitops/internal/chartdir"
 	"github.com/okdp/okdp-gitops/internal/dirfs"
 	"golang.org/x/sync/singleflight"
 )
@@ -63,7 +64,9 @@ type Puller interface {
 	Pull(ctx context.Context, ref chart.Ref, read func(io.Reader) error) error
 }
 
-// Cache is a chart cache directory. Safe for concurrent use.
+// Cache is a chart cache directory, the chart source of a build
+// (deploy.ChartSource): Get pulls a chart it lacks, FS gives them. Safe
+// for concurrent use.
 type Cache struct {
 	Dir    string
 	puller Puller
@@ -78,14 +81,13 @@ func NewCache(dir string, puller Puller) *Cache {
 }
 
 // ChartDir is the directory of a chart in the cache, slash-separated:
-// <repository without scheme>/<chart>-<version>/<chart>, the layout the
-// compiler reads (chart.Ref.Dir). A repository, a chart or a version
-// holding a ? or a # (a URL's query or fragment) is refused: the directory
-// of none.
-func ChartDir(ref chart.Ref) (string, error) { return ref.Dir() }
+// <repository without scheme>/<chart>-<version>/<chart> (chartdir.Of). A
+// repository, a chart or a version that cannot be a directory of the
+// cache is refused.
+func ChartDir(ref chart.Ref) (string, error) { return chartdir.Of(ref) }
 
-// FS is the cache as okdp-compiler reads it (Inputs.Charts), bounded and
-// with no symbolic link followed, as okdp-compile reads its --charts: a
+// FS is the cache as the checks of a compile read it (Source), bounded
+// and with no symbolic link followed, as okdp-compile reads its --charts: a
 // link refused wherever it points, a file that is neither regular nor a
 // directory refused, a file over 4 MiB, or the files read of one chart
 // through one FS over 64 MiB together, refused (dirfs.NewCharts): each
@@ -105,24 +107,6 @@ type errFS struct{ err error }
 
 func (e errFS) Open(name string) (fs.File, error) {
 	return nil, &fs.PathError{Op: "open", Path: name, Err: e.err}
-}
-
-// Ensure pulls the charts the cache lacks, the compiler.ChartSource of a
-// compile (compiler.CompileTree): the cache, and why each chart that could
-// not be pulled could not be, by chart: the compile goes on without the
-// checks of those, each instance naming one reported alone
-// (compiler.Inputs.ChartFailures, RequireRender).
-func (c *Cache) Ensure(ctx context.Context, refs []chart.Ref) (fs.FS, map[chart.Ref]error) {
-	var failures map[chart.Ref]error
-	for _, ref := range refs {
-		if err := c.Get(ctx, ref); err != nil {
-			if failures == nil {
-				failures = map[chart.Ref]error{}
-			}
-			failures[ref] = err
-		}
-	}
-	return c.FS(), failures
 }
 
 // Archive: the chart archive of ref (.tgz) as it was pulled, and its
