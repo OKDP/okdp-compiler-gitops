@@ -23,8 +23,10 @@ plane.
    from the parts of the topology at their paths: a file of 4 MiB at
    most, 64 MiB together, no symbolic link ([the tree](01_layout.md)).
 3. **The load.** `deploy.Build`, `compiler.Build` with the
-   [standard rule set](05_rules.md), Helm's merge and the policy, of the
-   tree and the catalogs, each a `compiler.Repository`
+   compiler's mandatory [rule
+   set](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md),
+   Helm's merge and the [policy](05_rules.md), of the tree and the
+   catalogs, each a `compiler.Repository`
    (`compiler.LoadRepository`, then the compile):
    every instance, its package, its context (`platform.yaml`,
    `project.yaml`, `connections.yaml`), its values (`config.yaml`), its
@@ -64,7 +66,7 @@ plane.
    deploy.
    A chart key given upstream values, of such a project, is rendered with
    its final values and its manifests checked (the render, [the
-   rules](05_rules.md#the-render)); the rendered output is never written.
+   policy](05_rules.md#the-render)); the rendered output is never written.
    The CI's compile renders, always; the control plane's checks do not
    (`Compiler.SkipRender`, `deploy.BuildOptions.SkipRender`).
    Each instance's compile is bounded (`--instance-timeout`, the CI's

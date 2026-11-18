@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.2
-	github.com/okdp/okdp-compiler v0.8.0
+	github.com/okdp/okdp-compiler v0.8.1
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/rogpeppe/go-internal v1.16.0

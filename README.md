@@ -10,18 +10,18 @@ commits the output, which the engine reconciles.
 - okdp-compiler does the compiling: it reads the tree and compiles every
   instance together, each claim bound to its provider, each instance's
   final values merged as Helm merges them, and orders the releases
-  (`compiler.Build`). It holds the rules every compile needs, its
-  mandatory set, and no platform's policy: a compile without a rule set
-  refuses nothing. It reads no upstream chart.
-- okdp-gitops gives it the OKDP platform's rules (`rules/v1`, the
-  standard rule set, added to the mandatory one, and the upstream and ingress policy of
-  `internal/policy`, wired by `deploy.Build`), and does everything around
-  the compile. It checks the final values against the upstream charts
-  (`internal/chartcheck`: their schemas over their defaults, the lists
-  an instance appends to), which the compiler does not read, with the
-  chart cache of the checks (`chartcache`). It writes what the engines
-  deploy (`deploy`: the targets `helm`, `umbrella`, `flux` and
-  `argocd`), holds the edits of the tree and their checks (`treeedit`).
+  (`compiler.Build`). It holds the rule set of an OKDP platform, its
+  mandatory set, which every compile applies, its checks among them. It
+  reads no upstream chart.
+- okdp-gitops adds its policy to that rule set (the upstream and
+  ingress policy of `internal/policy`, wired by `deploy.Build`), and
+  does everything around the compile. It checks the final values
+  against the upstream charts (`internal/chartcheck`: their schemas over
+  their defaults, the lists an instance appends to), which the compiler
+  does not read, with the chart cache of the checks (`chartcache`). It
+  writes what the engines deploy (`deploy`: the targets `helm`,
+  `umbrella`, `flux` and `argocd`), holds the edits of the tree and
+  their checks (`treeedit`).
   It keeps the projects with a problem as their last output. On the Git
   side, it checks out the parts of the tree (io and split topologies;
   the repository of a new project, on Forgejo, named
@@ -221,8 +221,8 @@ re-derived all the same.
 |---|---|
 | `gitops` | the stores (`GitStore`, `MemoryStore`, a topology's `Repositories`), each a `treeedit.Reader`, its reads snapshots that run at once, no write waiting on them nor they on a write, its transactions a `treeedit.Writer`; the compile of the tree a store holds (`Compiler`); the commits of the `treeedit` edits (`Deployments.Apply`, and a method per edit), the reads of the tree through `treeedit`; the repository of a new project (`ForgejoClient`); the output written to Git (`WriteCompiled`), the workflow of the output (`OutputWorkflow`) |
 | `catalog` | the catalog repositories of `catalogs.yaml` (`treeedit.CatalogRepository`), fetched from Git (`Loader`), indexed by okdp-compiler (`Index`) |
-| `deploy` | `Build`, `compiler.Build` with the standard rule set, Helm's merge and the policy, the final values checked against the upstream charts (`BuildOptions.Charts`: `NewCharts` of a `ChartSource`, a `chartcache.Cache` or `StaticCharts`); the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`), `TreeFiles`, the files of a tree, and what reads them back (`ReadCompiled`, `ReadPublished`, `ReadArgoRoot`) |
-| `rules` | `Standard`, the standard rule set, `rules/v1` embedded ([the rule set](docs/specs/05_rules.md)) |
+| `deploy` | `Build`, `compiler.Build` with the compiler's mandatory rule set, Helm's merge and the policy, the final values checked against the upstream charts (`BuildOptions.Charts`: `NewCharts` of a `ChartSource`, a `chartcache.Cache` or `StaticCharts`); the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`), `TreeFiles`, the files of a tree, and what reads them back (`ReadCompiled`, `ReadPublished`, `ReadArgoRoot`) |
+| `rules` | `Standard`, the compiler's mandatory rule set ([the policy](docs/specs/05_rules.md)) |
 | `treeedit` | the tree read (`ReadSources`, its readers) and its edits, each with its check (`Apply`, `Check.Verify`): an instance, a connection, a named claim, a project, `catalogs.yaml`, `projects.yaml` |
 | `chartcache` | the chart cache of the checks, a `deploy.ChartSource`: the upstream charts pulled from OCI registries and https repositories |
 
@@ -235,7 +235,7 @@ re-derived all the same.
 | `cmd/okdp-gitops/` | the binary: the flags, the repositories read, the compile, the writes and their commits |
 | `cmd/okdp-compile/` | the binary that compiles local directories for one target |
 | `deploy/` | the compile with the platform's rules, and what writes it |
-| `rules/` | the standard rule set, `rules/v1` |
+| `rules/` | `Standard`, the compiler's mandatory rule set |
 | `treeedit/`, `chartcache/` | the edits of the tree and their checks; the chart cache |
 | `gitops/` | the stores and the topologies, the compile of the tree, the Git transactions of the control plane's edits, the output, the workflow |
 | `catalog/` | the catalog repositories |
@@ -254,7 +254,7 @@ re-derived all the same.
 
 [docs/README.md](docs/README.md) indexes the documentation: usage, setting
 up a deployments repository, the tree, the compile, the output,
-topologies, the rule set, architecture. The tree, the packages and how the
+topologies, the policy, architecture. The tree, the packages and how the
 instances compile are okdp-compiler's ([its
 documentation](https://github.com/OKDP/okdp-compiler/blob/main/docs/README.md)).
 
@@ -262,7 +262,7 @@ documentation](https://github.com/OKDP/okdp-compiler/blob/main/docs/README.md)).
 
 okdp-gitops builds with Go 1.27 or later. `go.mod` requires a release of
 okdp-compiler ([its
-releases](https://github.com/OKDP/okdp-compiler/releases)), v0.8.0, and
+releases](https://github.com/OKDP/okdp-compiler/releases)), v0.8.1, and
 through it one of cel2yaml, downloaded as any other module.
 
 ```bash

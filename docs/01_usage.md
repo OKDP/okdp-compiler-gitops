@@ -20,7 +20,7 @@ The commands below run from the repository root, after `make build` and
 ### From a checkout
 
 okdp-gitops builds with Go 1.27 or later. `go.mod` requires a release of
-okdp-compiler, v0.8.0, one of
+okdp-compiler, v0.8.1, one of
 [its releases](https://github.com/OKDP/okdp-compiler/releases), and
 through it one of cel2yaml, both downloaded as any other module.
 
@@ -125,7 +125,7 @@ A compile:
    (the files together 64 MiB at most), a local directory read in place;
 3. fetches the catalogs of `catalogs.yaml`, each at its ref only, its
    last commit, and compiles the tree with
-   okdp-compiler, the standard rule set given (`deploy.Build`):
+   okdp-compiler, its mandatory rule set given (`deploy.Build`):
    `compiler.LoadRepository` of its parts (`catalogs.yaml` among them,
    its menu checked against the catalogs) and the catalogs, with
    `--charts` the upstream charts fetched, `CompileTree`, the final
@@ -438,9 +438,10 @@ refused.
 `okdp-compile` compiles a tree from local directories and writes the
 files of one target. It reads no Git repository and commits nothing:
 a catalog's CI, a person writing a package, a script. It compiles as
-`okdp-gitops compile` does (`deploy.Build`: the
-[standard rule set](specs/05_rules.md), Helm's merge of the final values
-and the upstream and ingress policy).
+`okdp-gitops compile` does (`deploy.Build`: okdp-compiler's [rule
+set](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md),
+Helm's merge of the final values and the upstream and ingress
+[policy](specs/05_rules.md)).
 
 ```text
 okdp-compile --repository <dir> [--repository <dir>]...
@@ -714,11 +715,12 @@ printed before the files are written, and the command exits with status
 The default target's output installs with `helm install`, without a
 chart of its own: the `okdp-objects` chart first, whose Secrets the
 instance's pods read, then the package of the catalog as it is, its
-dependencies built. `<dir>` is
-`<output>/projects/<namespace>/instances/<release>`:
+dependencies built. The `okdp-objects` chart is OKDP/okdp-objects-chart
+0.1.0, installed from a checkout, as it is not published to a registry
+yet. `<dir>` is `<output>/projects/<namespace>/instances/<release>`:
 
 ```bash
-helm upgrade --install <release>-okdp oci://quay.io/okdp/charts/okdp-objects --version 0.1.0 \
+helm upgrade --install <release>-okdp ../okdp-objects-chart \
   --namespace <namespace> -f <dir>/okdp-objects.values.yaml
 helm dependency build <package>
 helm upgrade --install <release> <package> --namespace <namespace> -f <dir>/values.yaml
@@ -893,7 +895,8 @@ pre-install/pre-upgrade hook (an Argo CD `PreSync` hook), which writes the
 client's Secret; the pods that read it do not start before it exists. A
 changed `redirectUris` reaches the provider at the next sync, and a
 `pre-delete` hook (Argo CD `PostDelete`) removes the client and its Secret
-at uninstall ([OAuth clients](specs/05_rules.md#oauth-clients)).
+at uninstall ([OAuth
+clients](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md#oauth-clients)).
 
 **What the instance publishes.** `okdp.info.yaml`, beside its chart: its
 `url`, its `usage`, and `provides`, the connections it provides with
@@ -915,8 +918,8 @@ applies an edit and its check, and commits the change.
 |---|---|
 | `gitops` | the stores: `Store` (`View`, a `treeedit.Reader`; `Update`, a `Tx`, a `treeedit.Writer`), `GitStore` (a Git remote, go-git), `MemoryStore`, `Repositories` (the parts of a `Topology`); `Credentials`: the credentials of the repositories, the catalogs and the Forgejo API, the `http://` hosts allowed; `Compiler`: the compile of the tree a store holds (`SkipRender`: no render of the charts, for a long-running process; [the render](specs/05_rules.md#the-render)); `Deployments`: the edits of `treeedit` committed (`Apply`, a method per edit), the reads of the tree and of the output through `treeedit`, the output (`WriteCompiled`); `ForgejoClient`; the workflow of the output (`OutputWorkflow`) |
 | `catalog` | the catalogs of `catalogs.yaml` (each a `treeedit.CatalogRepository`): `Loader` (Git repositories at their ref, local directories), `Catalogs`, indexed by okdp-compiler (`Index`, a `compiler.Catalog`: services, versions, packages, contracts) |
-| `deploy` | `Build(ctx, repos, BuildOptions)`: `compiler.Build` with the standard rule set, Helm's merge and the policy, each unless the caller gives another, the final values checked against the upstream charts of `BuildOptions.Charts` (`SkipRender`: the same `Finalize`, the charts not rendered); `ChartSource` (a `chartcache.Cache`, or `StaticCharts(fsys)`, a directory filled already), `NewCharts(src)`, the `Charts` of one build (`Failures`, `FS`); `CoalesceValues(values, defaults)`: values over a chart's defaults as Helm coalesces them; the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`); `TreeFiles(t, targets, previous, charts)`: the files of a tree; `Write`: those of one compile for a plain `helm install`; `ReadCompiled`, `ReadPublished`, `ReadArgoRoot`, `ProjectAccess`, `CheckReleases` |
-| `rules` | `Standard`: the standard rule set ([the rule set](specs/05_rules.md)) |
+| `deploy` | `Build(ctx, repos, BuildOptions)`: `compiler.Build` with the compiler's mandatory rule set, Helm's merge and the policy, each unless the caller gives another, the final values checked against the upstream charts of `BuildOptions.Charts` (`SkipRender`: the same `Finalize`, the charts not rendered); `ChartSource` (a `chartcache.Cache`, or `StaticCharts(fsys)`, a directory filled already), `NewCharts(src)`, the `Charts` of one build (`Failures`, `FS`); `CoalesceValues(values, defaults)`: values over a chart's defaults as Helm coalesces them; the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`); `TreeFiles(t, targets, previous, charts)`: the files of a tree; `Write`: those of one compile for a plain `helm install`; `ReadCompiled`, `ReadPublished`, `ReadArgoRoot`, `ProjectAccess`, `CheckReleases` |
+| `rules` | `Standard`: the compiler's mandatory rule set ([the policy](specs/05_rules.md)) |
 | `treeedit` | the tree read, its edits and their checks: `Reader`, `Writer`, `Apply`, `Check.Verify`, `ReadSources`, `OutputTargets`, `OutputFS`, `WriteOutput` |
 | `chartcache` | the chart cache of the checks, a `deploy.ChartSource` (`Get` pulls a chart it lacks, `FS` gives them): `NewCache`, `NewRepositoryPuller`, set as `Compiler.Charts` |
 

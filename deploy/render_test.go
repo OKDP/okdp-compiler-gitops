@@ -11,19 +11,19 @@ import (
 	compiler "github.com/okdp/okdp-compiler"
 
 	"github.com/okdp/okdp-gitops/deploy"
-	"github.com/okdp/okdp-gitops/internal/rulestest"
 )
 
 // renderFixture: a tree of a package app, whose chart (ref, in chartsDir of
-// the cache) renders the objects its values extraResources names and, for
+// the cache) renders the objects its values extras names (a key no rule
+// denies, as extraResources is) and, for
 // the key ips, a Service with these externalIPs; the project demo, an
 // instance web of it with the upstream values of config, a suffix for hosts.
 func renderFixture(config string) (tree, charts fstest.MapFS) {
 	chartDir := "charts.example.org/app-1.0.0/app"
 	charts = fstest.MapFS{
 		chartDir + "/Chart.yaml":            {Data: []byte("apiVersion: v2\nname: app\nversion: 1.0.0\n")},
-		chartDir + "/values.yaml":           {Data: []byte("extraResources: []\n")},
-		chartDir + "/templates/extras.yaml": {Data: []byte("{{ range .Values.extraResources }}\n---\n{{ toYaml . }}\n{{ end }}\n")},
+		chartDir + "/values.yaml":           {Data: []byte("extras: []\nextraResources: []\n")},
+		chartDir + "/templates/extras.yaml": {Data: []byte("{{ range .Values.extras }}\n---\n{{ toYaml . }}\n{{ end }}\n")},
 		chartDir + "/templates/svc.yaml": {Data: []byte(`{{ with .Values.ips }}apiVersion: v1
 kind: Service
 metadata: {name: x}
@@ -42,17 +42,11 @@ spec: {externalIPs: {{ toJson . }}}
 }
 
 // compileFixture: the outcome of the instance web of renderFixture
-// compiled against charts, the standard rule set edited.
-func compileFixture(t *testing.T, config string, edit func(string) string) (error, *compiler.Tree) {
+// compiled against charts, with the standard rule set.
+func compileFixture(t *testing.T, config string) (error, *compiler.Tree) {
 	t.Helper()
 	tree, charts := renderFixture(config)
-	rules := rulestest.Edited(t, func(s string) string {
-		if edit != nil {
-			return edit(s)
-		}
-		return s
-	})
-	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{BuildOptions: compiler.BuildOptions{Rules: rules}, Charts: deploy.NewCharts(deploy.StaticCharts(charts))})
+	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{Charts: deploy.NewCharts(deploy.StaticCharts(charts))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,22 +57,13 @@ func compileFixture(t *testing.T, config string, edit func(string) string) (erro
 	return ti.Err(), tr
 }
 
-// noDeny: the rule set without extraResources in deniedUpstreamKeys: only
-// the render stands between the value and the cluster.
-func noDeny(s string) string {
-	if !strings.Contains(s, "      - extraResources\n") {
-		panic("no extraResources in the rule set")
-	}
-	return strings.Replace(s, "      - extraResources\n", "", 1)
-}
-
-// TestRenderedExtraResources: extraResources refused by the render of the
-// chart, with the key removed from the deny-list: an Ingress of a foreign
-// host, a HelmRelease; what the project may deploy passes.
+// TestRenderedExtraResources: objects a chart renders from its values
+// refused by the render, under a key no rule denies (extras): an Ingress of
+// a foreign host, a HelmRelease; what the project may deploy passes.
 func TestRenderedExtraResources(t *testing.T) {
 	const foreignIngress = `upstream:
   app:
-    extraResources:
+    extras:
       - apiVersion: networking.k8s.io/v1
         kind: Ingress
         metadata: {name: x}
@@ -89,7 +74,7 @@ func TestRenderedExtraResources(t *testing.T) {
 `
 	const helmRelease = `upstream:
   app:
-    extraResources:
+    extras:
       - apiVersion: helm.toolkit.fluxcd.io/v2
         kind: HelmRelease
         metadata: {name: x}
@@ -97,7 +82,7 @@ func TestRenderedExtraResources(t *testing.T) {
 `
 	const allowed = `upstream:
   app:
-    extraResources:
+    extras:
       - apiVersion: networking.k8s.io/v1
         kind: Ingress
         metadata: {name: x}
@@ -109,17 +94,17 @@ func TestRenderedExtraResources(t *testing.T) {
         kind: ConfigMap
         metadata: {name: c}
 `
-	if err, _ := compileFixture(t, foreignIngress, noDeny); err == nil || !strings.Contains(err.Error(), `upstream.app (rendered): objects: Ingress/x: spec.rules[0].host: host "keycloak.okdp.sandbox" is not served by demo`) {
+	if err, _ := compileFixture(t, foreignIngress); err == nil || !strings.Contains(err.Error(), `upstream.app (rendered): objects: Ingress/x: spec.rules[0].host: host "keycloak.okdp.sandbox" is not served by demo`) {
 		t.Errorf("a foreign host through extraResources: %v", err)
 	}
-	if err, _ := compileFixture(t, helmRelease, noDeny); err == nil || !strings.Contains(err.Error(), "upstream.app (rendered): objects: HelmRelease/x: an object of the deployer's kinds") {
+	if err, _ := compileFixture(t, helmRelease); err == nil || !strings.Contains(err.Error(), "upstream.app (rendered): objects: HelmRelease/x: an object of the deployer's kinds") {
 		t.Errorf("a HelmRelease through extraResources: %v", err)
 	}
-	if err, _ := compileFixture(t, allowed, noDeny); err != nil {
+	if err, _ := compileFixture(t, allowed); err != nil {
 		t.Errorf("what the project may deploy: %v", err)
 	}
-	// With the standard set, the deny-list refuses first, with the clear message.
-	if err, _ := compileFixture(t, foreignIngress, nil); err == nil || !strings.Contains(err.Error(), "extraResources is denied to the instance's upstream values") {
+	// Under extraResources, the deny-list refuses first, with the clear message.
+	if err, _ := compileFixture(t, strings.Replace(foreignIngress, "extras:", "extraResources:", 1)); err == nil || !strings.Contains(err.Error(), "extraResources is denied to the instance's upstream values") {
 		t.Errorf("the deny-list: %v", err)
 	}
 }
@@ -127,7 +112,7 @@ func TestRenderedExtraResources(t *testing.T) {
 // TestRenderedExternalIPs: a Service with spec.externalIPs refused by the
 // render, without the key on the deny-list.
 func TestRenderedExternalIPs(t *testing.T) {
-	err, _ := compileFixture(t, "upstream:\n  app:\n    ips: [1.2.3.4]\n", nil)
+	err, _ := compileFixture(t, "upstream:\n  app:\n    ips: [1.2.3.4]\n")
 	if err == nil || !strings.Contains(err.Error(), "upstream.app (rendered): objects: Service/x: spec.externalIPs") {
 		t.Errorf("got %v", err)
 	}

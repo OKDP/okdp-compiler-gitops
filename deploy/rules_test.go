@@ -11,7 +11,7 @@ import (
 // rule set, the standard one without; the roles are the compiler's mandatory
 // set's, whichever set is given.
 func TestProjectAccessRules(t *testing.T) {
-	set := rulestest.Edited(t, func(s string) string { return s })
+	set := rulestest.Added(t)
 	file := []byte("access: {ops: editor}\n")
 	if _, err := deploy.ProjectAccess(nil, file, "demo"); err != nil {
 		t.Errorf("the standard set: %v", err)

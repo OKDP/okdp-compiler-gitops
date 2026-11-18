@@ -200,9 +200,10 @@ with no permission>` and `--no-cross-namespace-refs=true`: without them a
 `HelmRelease` that names no identity runs as the controller, and the
 confinement of a project stops being the namespace
 ([what the engines need](specs/03_output.md#what-the-engines-need),
-[the deployer's Role](specs/05_rules.md#the-deployers-role)). The Role
-of a project's releases lists explicit API groups: a chart of a custom
-resource that is not listed needs its group in
+[the deployer's
+Role](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md#the-deployers-role)).
+The Role of a project's releases lists explicit API groups: a chart of a
+custom resource that is not listed needs its group in
 `global.okdp.policy.projectApiGroups`.
 
 ## 6'. Or with Argo CD

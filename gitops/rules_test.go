@@ -15,9 +15,7 @@ import (
 // TestCompilerRules: a Compiler's rule set reaches its compiles and the
 // check of a project's name.
 func TestCompilerRules(t *testing.T) {
-	set := rulestest.Edited(t, func(s string) string {
-		return strings.Replace(s, "[argocd, flux-system, okdp-releases]", "[argocd, flux-system, okdp-releases, lab]", 1)
-	})
+	set := rulestest.Added(t)
 	var got *compiler.RuleSet
 	c := &Compiler{Rules: set, build: func(_ context.Context, _ []compiler.Repository, o deploy.BuildOptions) (*compiler.Tree, error) {
 		got = o.Rules
@@ -30,9 +28,9 @@ func TestCompilerRules(t *testing.T) {
 	if err := d.CheckProjectName(t.Context(), "lab"); err != nil {
 		t.Errorf("the standard set: %v", err)
 	}
-	d.Compiler = c
-	if err := d.CheckProjectName(t.Context(), "lab"); err == nil || !strings.Contains(err.Error(), "reserved") {
-		t.Errorf("the Compiler's set: %v", err)
+	d.Compiler = &Compiler{Rules: &compiler.RuleSet{}}
+	if err := d.CheckProjectName(t.Context(), "lab"); err == nil || !strings.Contains(err.Error(), "no rule set was loaded") {
+		t.Errorf("the Compiler's set, not loaded: %v", err)
 	}
 }
 

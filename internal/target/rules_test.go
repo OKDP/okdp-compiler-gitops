@@ -14,7 +14,7 @@ import (
 // TestProjectRoles: the manifests of a project hold the roles its rule set
 // accepts, those of the compiler's mandatory set.
 func TestProjectRoles(t *testing.T) {
-	set := rulestest.Edited(t, func(s string) string { return s })
+	set := rulestest.Added(t)
 	in := func(role string) compiler.Inputs {
 		return compiler.Inputs{Rules: set, Namespace: "demo", Context: []compiler.ContextLayer{{Level: 1, Values: map[string]any{"access": map[string]any{"ops": role}}}}}
 	}

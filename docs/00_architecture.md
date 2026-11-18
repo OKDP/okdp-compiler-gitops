@@ -3,7 +3,7 @@
 How okdp-gitops works. What it reads and writes is specified in
 [the tree](specs/01_layout.md), [the compile](specs/02_compile.md),
 [the output](specs/03_output.md), [topologies](specs/04_topology.md) and
-[the rule set](specs/05_rules.md);
+[the policy](specs/05_rules.md);
 how the tree compiles, in okdp-compiler's
 [architecture](https://github.com/OKDP/okdp-compiler/blob/main/docs/00_architecture.md).
 
@@ -34,8 +34,8 @@ flowchart LR
 reads the tree, binds each claim to its provider, compiles every
 instance with what the others publish, merges its final values as Helm
 does, and orders the releases; it reads no upstream chart. okdp-gitops
-is what surrounds that: the platform's rules (`rules/v1`,
-`internal/policy`), the checks of the final values against the upstream
+is what surrounds that: the policy added to the compiler's rule set
+(`internal/policy`), the checks of the final values against the upstream
 charts (`internal/chartcheck`), the files the deployers read (`deploy`,
 `internal/target`), the edits of the tree (`treeedit`), the chart cache
 (`chartcache`), and the Git around it. It
@@ -67,8 +67,8 @@ the latest sources.
 | `cmd/okdp-gitops/topology.go`, `cmd/okdp-gitops/workflow.go` | the io topology of `--tree` and `--output`, the path of a directory in its repository; `okdp-gitops workflow` |
 | `cmd/okdp-compile/` | the binary that compiles local directories: its flags, `deploy.Build`, the bindings, refusals and dependencies printed, `--partial`, `--report` |
 | `cmd/okdp-gitops/sources.go` | the record of the output, `sources.yaml`: what a compile read (`record`, `writeRecord`), the run that stops when it holds (`upToDate`, the refs listed without a fetch, `listRefs`); the revision a kept project's output is the compile of, reported (`keptSince`, `reportKept`) |
-| `deploy/` | `Build`, `compiler.Build` with the standard rule set, `helmvalues.New` (`helmvalues.WithoutRender` with `BuildOptions.SkipRender`) and `policy.CheckGlobals`, each unless the caller gives another, and with `BuildOptions.Charts` the upstream charts of every `Chart.yaml` of the tree fetched before the compile (`compiler.BuildOptions.Loaded`); `ChartSource`, `Charts`, `StaticCharts`, `NewCharts`, `CoalesceValues`; the targets, `TreeFiles`, the files of a compile, and what reads them back |
-| `rules/` | `Standard`, the standard rule set of `rules/v1`, embedded and read once; `TestCompilerCopy`, the copy okdp-compiler's tests read |
+| `deploy/` | `Build`, `compiler.Build` with the compiler's mandatory rule set, `helmvalues.New` (`helmvalues.WithoutRender` with `BuildOptions.SkipRender`) and `policy.CheckGlobals`, each unless the caller gives another, and with `BuildOptions.Charts` the upstream charts of every `Chart.yaml` of the tree fetched before the compile (`compiler.BuildOptions.Loaded`); `ChartSource`, `Charts`, `StaticCharts`, `NewCharts`, `CoalesceValues`; the targets, `TreeFiles`, the files of a compile, and what reads them back |
+| `rules/` | `Standard`, the compiler's mandatory rule set (`compiler.Mandatory`), and `Or`, a caller's set or it |
 | `treeedit/` | the tree read (`ReadSources`, the readers), the edits and their checks (`Apply`, `Check.Verify`), the output as a tree (`OutputTargets`, `OutputFS`, `WriteOutput`) |
 | `chartcache/` | the chart cache, a chart source (`Get`, `FS`): a chart pulled once and kept whole, with its archive, bounded (`NewCache`, `NewRepositoryPuller`, `Archive`); `ChartDir`, `chartdir.Of` |
 | `internal/chartcheck/` | the final values checked against the upstream charts, which the compiler does not read: `Source` (`Get`, `FS`), `Static`, a cache filled already; `Charts`, the charts of one build (`New`, `Fetch`, `Failed`, `Failures`, `FS`, `Check`); `Coalesce`, Helm's `chartutil.CoalesceValues` |
@@ -448,8 +448,6 @@ it on each pull request and push to `main`, with govulncheck.
   the versions the engines embed, and the check's coalesce
   (`chartcheck.Coalesce`) with Helm 3's (`helm3.json`, else `helm.json`),
   but for the one difference recorded (`coalesceKnown`).
-- `rules.TestCompilerCopy` keeps the standard rule set and the copy the
-  compiler's tests read the same.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org),
 `!` marking a breaking change of the tree, the output, the command line or

@@ -8,7 +8,7 @@
 | [The compile](specs/02_compile.md) | everyone (reference) | what okdp-gitops gives okdp-compiler and what it keeps of the answer: the parts and the catalogs, the chart cache and the checks against the upstream charts, the deployment graph, the problems; what a write of the control plane checks |
 | [The output](specs/03_output.md) | platform engineers, contributors (reference) | the targets, what each writes; `compiled/`, the files of the Flux and Argo CD targets, their paths, Argo CD's switch, what a compile rewrites; what the engines need |
 | [Topologies](specs/04_topology.md) | platform engineers (reference) | where each part lives: the topology file, io and split and who can write what, local directories, the credentials, the compile's commits and the runs that race, the control plane's commits |
-| [The rule set](specs/05_rules.md) | platform engineers, contributors (reference) | `rules/v1`: what it holds, what a platform may add, how to change a rule |
+| [The policy](specs/05_rules.md) | platform engineers, contributors (reference) | what okdp-gitops adds to okdp-compiler's rule set: who applies it, the upstream policy, the render |
 | [Architecture](00_architecture.md) | contributors | the position in OKDP, the source map, a compile, the stores, the design decisions, the tests, the limitations |
 
 The packages, the mapping language, how the instances compile, their
