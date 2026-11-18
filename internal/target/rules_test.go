@@ -11,12 +11,12 @@ import (
 	"github.com/okdp/okdp-gitops/internal/target/argocd"
 )
 
-// TestProjectRoles: the manifests of a project hold what the rule set of its
-// compile accepts, not the standard set's.
+// TestProjectRoles: the manifests of a project hold the roles its rule set
+// accepts, those of the compiler's mandatory set.
 func TestProjectRoles(t *testing.T) {
-	viewers := rulestest.Edited(t, func(s string) string { return strings.Replace(s, "[viewer, editor, admin]", "[viewer]", 1) })
+	set := rulestest.Edited(t, func(s string) string { return s })
 	in := func(role string) compiler.Inputs {
-		return compiler.Inputs{Rules: viewers, Namespace: "demo", Context: []compiler.ContextLayer{{Level: 1, Values: map[string]any{"access": map[string]any{"ops": role}}}}}
+		return compiler.Inputs{Rules: set, Namespace: "demo", Context: []compiler.ContextLayer{{Level: 1, Values: map[string]any{"access": map[string]any{"ops": role}}}}}
 	}
 	p, err := target.ProjectOf(in("viewer"))
 	if err != nil {
@@ -25,7 +25,7 @@ func TestProjectRoles(t *testing.T) {
 	if got := string(target.Access(p)); !strings.Contains(got, "name: okdp-access-viewer\n") {
 		t.Errorf("Access:\n%s", got)
 	}
-	_, err = target.ProjectOf(in("editor"))
+	_, err = target.ProjectOf(in("owner"))
 	if accessErr := new(target.AccessError); !errors.As(err, &accessErr) {
 		t.Errorf("a role the set does not hold: %v", err)
 	}

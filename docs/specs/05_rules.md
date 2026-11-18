@@ -1,10 +1,13 @@
 # The rule set
 
-The standard rule set says what a compile refuses on an OKDP platform,
-what a package's mapping may call, and how OKDP names its objects. It is
-data, in `rules/v1`, embedded in this module and read once by
-`rules.Standard()`. This page is its reference: every table, check,
-schema, function and document, and where each is applied.
+A compile applies two rule sets. okdp-compiler's mandatory set, embedded
+in that module ([`internal/rules/mandatory`](https://github.com/OKDP/okdp-compiler/tree/main/internal/rules/mandatory)),
+says what a package's mapping may call and how OKDP names its objects:
+every compile applies it. The standard rule set says what a compile
+refuses on an OKDP platform. It is data, in `rules/v1`, embedded in this
+module, read once by `rules.Standard()` and added to the mandatory set.
+This page is the reference of both: every table, check, schema, function
+and document, and where each is applied.
 
 - [Who applies it](#who-applies-it)
 - [What is not in the rule set](#what-is-not-in-the-rule-set)
@@ -23,13 +26,19 @@ schema, function and document, and where each is applied.
 - [Changing a rule](#changing-a-rule)
 
 ```text
-rules/v1/
-  rules.yaml                  the tables, and every file below by name
+rules/v1/                     this module: what a platform refuses
+  rules.yaml                  its tables, and every file below by name
+  schemas/
+    mapping.schema.json       what a mapping writes, and the functions' arguments
+  checks/                     one file per check
+  objects/
+    deployer-role.cel.yaml    the Role of a project's releases
+
+internal/rules/mandatory/     okdp-compiler: what every compile applies
+  rules.yaml                  its tables, and every file below by name
   scope.cel.yaml              what a mapping sees as platform
   schemas/
     platform.schema.json      global.okdp of the platform's values
-    mapping.schema.json       what a mapping writes, and the functions' arguments
-  checks/                     one file per check
   fragments/
     fragment-pod.cel.yaml     okdpPodSpec
     fragment-job.cel.yaml     okdpJob
@@ -47,13 +56,18 @@ rules/v1/
     pull-secret.cel.yaml      the ExternalSecret that reads it
 ```
 
+Every other file this page names is of one of the two, at the same
+relative path.
+
 `rules.yaml` is `apiVersion: okdp-compiler/rules.v1`, `version: 1.0.0`.
-okdp-compiler's `LoadRules` reads it and fails closed. It refuses a file
-that does not meet its `rules.schema.json`, another major `apiVersion`,
-a table or a check that is missing or unknown (an empty table is written
-`values: []`), a file it names that does not exist or does not compile,
-a set without the `objects` chart or the `scope` document, and a role
-other than `viewer`, `editor` or `admin`.
+okdp-compiler's `LoadRules` reads `rules/v1`, adds it to the mandatory set
+and fails closed. It refuses a file that does not meet its
+`rules.schema.json`, another major `apiVersion`, a rule the mandatory set
+gives (`a rule set adds rules, it replaces none`), a table or a check
+that neither gives or that is unknown (an empty table is written
+`values: []`), a file it names that does not exist or does not compile, a
+set without the mapping schema or the `objects` chart, and a role other
+than `viewer`, `editor` or `admin`.
 
 ## Who applies it
 
@@ -62,9 +76,9 @@ caller sets `BuildOptions.Rules`. `okdp-compile`, `okdp-gitops compile`
 and the control plane all go through it.
 
 A program that calls `compiler.Build` or `compiler.Compile` itself and
-gives no rule set compiles with okdp-compiler's empty set: nothing below
-applies but the names and the two tables listed under
-[Names, labels and charts](#names-labels-and-charts).
+gives no rule set compiles with okdp-compiler's mandatory set alone: no
+check refuses, no schema reads a mapping's sections, the `objects` chart
+has no default, and the rest of the mandatory set applies.
 
 A caller's rule set is honoured everywhere the tree is read, not only in
 the compile:
@@ -95,8 +109,8 @@ These stay in okdp-compiler's Go code and apply whatever the rule set:
   call the checks below.
 
 What each role may do is also fixed in Go: `target.ClusterRole` and
-`argocd.Policies`. A rule set may therefore list only some of `viewer`,
-`editor` and `admin`, and `LoadRules` refuses any other name. Neither
+`argocd.Policies`. The roles are the mandatory set's, `viewer`, `editor`
+and `admin`, and no rule set changes them. Neither
 function treats an unknown role as `admin`; given one, they panic.
 
 ## When each rule applies
@@ -302,8 +316,7 @@ groups becomes:
 | `editor` | `okdp-access-editor` | `edit` | also syncs them, runs resource actions and reads logs, never execs |
 | `admin` | `okdp-access-admin` | `admin` | also deletes them and overrides their sources and parameters |
 
-With no `access`, the group `okdp-project-<namespace>` is an editor, or
-has no role in a rule set that does not list `editor`.
+With no `access`, the group `okdp-project-<namespace>` is an editor.
 Group names in a RoleBinding carry `global.okdp.access.groupPrefix`. Argo
 CD reads the token's groups claim and has no prefix.
 
@@ -901,8 +914,8 @@ the compiler.
 | `claimSecret` | `$release-$secret` | a claimer's copy of a Secret from another namespace |
 | `credentialsLabel` | `okdp.io/credentials-$contract` | the label of a credentials Secret, set to `"true"` |
 
-The empty set in okdp-compiler keeps these four names, and the values of
-`projectPlatformKeys` and `wholePaths`, so that claims still bind.
+These names, the labels, keepSync, `projectPlatformKeys`, `wholePaths` and
+`projectRoles` are the mandatory set's.
 
 ### labels
 
@@ -929,8 +942,8 @@ that name is left alone. Argo CD reads none of Helm's annotations.
 local registry holds `okdp-objects`, and the sandbox overrides
 `charts.objects` to reach it.
 
-`ownCharts` ties the section `oidcClients` to the chart `oidcDcr`, the
-list document `oidcClients` and the values template `oidcDcr`.
+`ownObjects`, in the mandatory set, ties the section `oidcClients` to the
+list document `oidcClients` and the template `oidcClient`.
 
 ## What a platform can change
 
@@ -955,10 +968,12 @@ Only `deniedUpstreamKeys` is added to through `addFrom`. Nothing in
 
 ## Changing a rule
 
-Edit `rules/v1`, and run `make check`. A rule's message is part of its
+Edit `rules/v1`, or okdp-compiler's
+[`internal/rules/mandatory`](https://github.com/OKDP/okdp-compiler/tree/main/internal/rules/mandatory) for what every compile
+needs, and run `make check`. A rule's message is part of its
 contract: `testdata/cli` and the tests of `internal/policy` compare them.
 
-okdp-compiler holds a copy of this set in `testdata/rules` for its own
+okdp-compiler holds a copy of `rules/v1` in `testdata/rules` for its own
 tests, as its module cannot import this one. A change here must be made
 there too. `rules.TestCompilerCopy` fails while the two differ, finding
 the compiler's module with `go list -m`.

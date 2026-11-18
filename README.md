@@ -10,10 +10,11 @@ commits the output, which the engine reconciles.
 - okdp-compiler does the compiling: it reads the tree and compiles every
   instance together, each claim bound to its provider, each instance's
   final values merged as Helm merges them, and orders the releases
-  (`compiler.Build`). It holds no platform rule: a compile without a rule
-  set applies none.
+  (`compiler.Build`). It holds the rules every compile needs, its
+  mandatory set, and no platform's policy: a compile without a rule set
+  refuses nothing.
 - okdp-gitops gives it the OKDP platform's rules (`rules/v1`, the
-  standard rule set, and the upstream and ingress policy of
+  standard rule set, added to the mandatory one, and the upstream and ingress policy of
   `internal/policy`, wired by `deploy.Build`), and does everything around
   the compile. It writes what the engines deploy (`deploy`: the targets
   `helm`, `umbrella`, `flux` and `argocd`), holds the edits of the tree

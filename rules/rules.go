@@ -1,7 +1,8 @@
 // Package rules holds the standard rule set of an OKDP platform: what a
-// compile refuses and what it knows of a platform's names, as data read by
-// the compiler (compiler.LoadRules). A host gives it to its compiles
-// (compiler.BuildOptions.Rules); deploy.Build does.
+// compile refuses of a platform, as data read by the compiler
+// (compiler.LoadRules) and added to its mandatory set, both then applying.
+// A host gives it to its compiles (compiler.BuildOptions.Rules);
+// deploy.Build does.
 package rules
 
 import (

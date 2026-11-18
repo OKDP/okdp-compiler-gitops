@@ -919,8 +919,8 @@ applies an edit and its check, and commits the change.
 | `chartcache` | the chart cache of the checks: `NewCache`, `NewRepositoryPuller`, set as `Compiler.Charts` |
 
 A program that calls `compiler.Build` itself, without `deploy.Build`,
-compiles with no rule set: no namespace, object, upstream or host
-policy, no platform function.
+compiles with okdp-compiler's mandatory rules alone: no namespace, object,
+upstream or host policy.
 
 The test tree, compiled in memory, as `okdp-gitops compile` compiles it,
 then changed as the control plane changes it (run from the repository
