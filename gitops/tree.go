@@ -188,9 +188,8 @@ func (c *Compiler) buildTree(ctx context.Context, repos []compiler.Repository) (
 	}
 	charts := deploy.NewCharts(c.Charts)
 	opts := deploy.BuildOptions{
-		BuildOptions: compiler.BuildOptions{CostLimit: c.CostLimit, InstanceTimeout: c.InstanceTimeout, Rules: c.Rules},
-		Charts:       charts,
-		SkipRender:   c.SkipRender,
+		CostLimit: c.CostLimit, InstanceTimeout: c.InstanceTimeout, Rules: c.Rules,
+		Charts: charts, SkipRender: c.SkipRender,
 	}
 	if t, err = build(ctx, repos, opts); err != nil {
 		return nil, false, err

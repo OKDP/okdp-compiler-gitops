@@ -94,7 +94,7 @@ func CheckRendered(ctx context.Context, charts *chartcheck.Charts, in compiler.F
 			return err
 		}
 		if why := charts.Failed(spec.Source); why != nil {
-			return fmt.Errorf("upstream.%s: the chart %s could not be fetched (%v): its upstream values are refused, nothing can check them", key, spec.Source.ID(), why)
+			return fmt.Errorf("upstream.%s: the chart %s could not be fetched (%w): its upstream values are refused, nothing can check them", key, spec.Source.ID(), why)
 		}
 		if charts == nil {
 			continue

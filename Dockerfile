@@ -2,7 +2,7 @@
 # does not change what builds. The Go toolchain is go.mod's; Alpine a
 # supported branch (https://alpinelinux.org/releases/). Bumped by hand, the
 # tag and its digest together (docker buildx imagetools inspect <image>).
-ARG GO_IMAGE=golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b
+ARG GO_IMAGE=golang:1.27.4@sha256:205c7636d74e0ffbe3d007162df7d74f859f5a8c8322dfb9f907977686c126cf
 ARG ALPINE_IMAGE=alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 
 # Cross-compile on the native build platform (no QEMU emulation): the Go
