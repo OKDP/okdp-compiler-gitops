@@ -80,7 +80,7 @@ func violation(ti *compiler.TreeInstance, files map[string][]byte, charts fs.FS)
 	in := ti.Inputs
 	settings, err := compiler.PlatformOf(ctx, in)
 	if err != nil || compiler.Privileged(settings, in.Namespace) {
-		return nil
+		return nil //nolint:nilerr // no platform settings: the instance's refusal says why
 	}
 	dir := target.InstanceDir(in.Namespace, ti.Release())
 	raw, ok := files[path.Join(dir, helm.ValuesFile)]
@@ -89,7 +89,7 @@ func violation(ti *compiler.TreeInstance, files map[string][]byte, charts fs.FS)
 	}
 	var deployed map[string]map[string]any
 	if yaml.Unmarshal(raw, &deployed) != nil || deployed == nil {
-		return nil
+		return nil //nolint:nilerr // values that do not parse: nothing can tell
 	}
 	upstream := mergedUpstream(in)
 	check := policy.UpstreamCheck(ctx, in.Rules, settings, in.Namespace, false)

@@ -342,8 +342,8 @@ func buildTree(o options, in *inputs, rep *report) (*compiler.Tree, error) {
 		defer cancel()
 	}
 	t, err := deploy.Build(ctx, in.repos, deploy.BuildOptions{
-		BuildOptions: compiler.BuildOptions{CostLimit: o.costLimit, InstanceTimeout: o.instanceTimeout, AllowPlainSecrets: o.allowPlainSecrets},
-		Charts:       deploy.NewCharts(in.charts),
+		CostLimit: o.costLimit, InstanceTimeout: o.instanceTimeout, AllowPlainSecrets: o.allowPlainSecrets,
+		Charts: deploy.NewCharts(in.charts),
 	})
 	if err != nil {
 		return nil, err

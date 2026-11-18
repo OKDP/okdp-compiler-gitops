@@ -43,7 +43,7 @@ spec: {externalIPs: {{ toJson . }}}
 
 // compileFixture: the outcome of the instance web of renderFixture
 // compiled against charts, with the standard rule set.
-func compileFixture(t *testing.T, config string) (error, *compiler.Tree) {
+func compileFixture(t *testing.T, config string) (*compiler.Tree, error) {
 	t.Helper()
 	tree, charts := renderFixture(config)
 	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{Charts: deploy.NewCharts(deploy.StaticCharts(charts))})
@@ -54,7 +54,7 @@ func compileFixture(t *testing.T, config string) (error, *compiler.Tree) {
 	if ti == nil {
 		t.Fatalf("no instance: problems %q", tr.Problems())
 	}
-	return ti.Err(), tr
+	return tr, ti.Err()
 }
 
 // TestRenderedExtraResources: objects a chart renders from its values
@@ -94,17 +94,17 @@ func TestRenderedExtraResources(t *testing.T) {
         kind: ConfigMap
         metadata: {name: c}
 `
-	if err, _ := compileFixture(t, foreignIngress); err == nil || !strings.Contains(err.Error(), `upstream.app (rendered): objects: Ingress/x: spec.rules[0].host: host "keycloak.okdp.sandbox" is not served by demo`) {
+	if _, err := compileFixture(t, foreignIngress); err == nil || !strings.Contains(err.Error(), `upstream.app (rendered): objects: Ingress/x: spec.rules[0].host: host "keycloak.okdp.sandbox" is not served by demo`) {
 		t.Errorf("a foreign host through extraResources: %v", err)
 	}
-	if err, _ := compileFixture(t, helmRelease); err == nil || !strings.Contains(err.Error(), "upstream.app (rendered): objects: HelmRelease/x: an object of the deployer's kinds") {
+	if _, err := compileFixture(t, helmRelease); err == nil || !strings.Contains(err.Error(), "upstream.app (rendered): objects: HelmRelease/x: an object of the deployer's kinds") {
 		t.Errorf("a HelmRelease through extraResources: %v", err)
 	}
-	if err, _ := compileFixture(t, allowed); err != nil {
+	if _, err := compileFixture(t, allowed); err != nil {
 		t.Errorf("what the project may deploy: %v", err)
 	}
 	// Under extraResources, the deny-list refuses first, with the clear message.
-	if err, _ := compileFixture(t, strings.Replace(foreignIngress, "extras:", "extraResources:", 1)); err == nil || !strings.Contains(err.Error(), "extraResources is denied to the instance's upstream values") {
+	if _, err := compileFixture(t, strings.Replace(foreignIngress, "extras:", "extraResources:", 1)); err == nil || !strings.Contains(err.Error(), "extraResources is denied to the instance's upstream values") {
 		t.Errorf("the deny-list: %v", err)
 	}
 }
@@ -112,7 +112,7 @@ func TestRenderedExtraResources(t *testing.T) {
 // TestRenderedExternalIPs: a Service with spec.externalIPs refused by the
 // render, without the key on the deny-list.
 func TestRenderedExternalIPs(t *testing.T) {
-	err, _ := compileFixture(t, "upstream:\n  app:\n    ips: [1.2.3.4]\n")
+	_, err := compileFixture(t, "upstream:\n  app:\n    ips: [1.2.3.4]\n")
 	if err == nil || !strings.Contains(err.Error(), "upstream.app (rendered): objects: Service/x: spec.externalIPs") {
 		t.Errorf("got %v", err)
 	}
