@@ -247,7 +247,7 @@ re-derived all the same.
 | `internal/buildinfo/` | the program's name and version |
 | `examples/` | six trees and what `okdp-compile` writes of them, byte for byte: `input/db/` is the real tree, whose `projects/<namespace>/instances/<instance>/` gives each instance its namespace and release |
 | `testdata/` | a tree (`tree/`): a provider of databases and the instances that claim them, and its catalog (`catalog/`); the fixtures of the CLI (`cli/`), of Helm (`helm/`) and of the targets (`targets/`) |
-| `Dockerfile`, `.goreleaser.yaml`, `.github/workflows/` | the image of `okdp-gitops`; the release archives of `okdp-compile`; CI (`ci.yml`), the image's build (`build-image.yml`), the Helm fixtures (`helm-fixtures.yml`) |
+| `Dockerfile`, `.goreleaser.yaml`, `.github/workflows/` | the image of `okdp-gitops`; the release archives of `okdp-compile`; CI (`ci.yml`), the releases (`release-please.yml`), the image's build (`build-image.yml`), the Helm fixtures (`helm-fixtures.yml`) |
 | `docs/` | the documentation |
 
 ## Documentation

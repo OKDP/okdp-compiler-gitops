@@ -60,16 +60,17 @@ docker build --build-arg VERSION=1.2.3 -t okdp-gitops .
 
 okdp-compiler and cel2yaml are downloaded at the releases `go.mod`
 requires. The image holds `okdp-gitops` only:
-`okdp-compile` is built from a checkout, or from the archives of
-`.goreleaser.yaml` once a release publishes them.
+`okdp-compile` is built from a checkout, or taken from the archives of
+`.goreleaser.yaml` that each release publishes.
 
 Its base images are pinned by digest, the Go toolchain of `go.mod` and
 a supported Alpine branch (`GO_IMAGE`, `ALPINE_IMAGE`, a tag and its
 digest, bumped together by hand).
 
-`.github/workflows/build-image.yml`, run by hand or called by another
-workflow with a version, publishes it for `linux/amd64` and `linux/arm64`
-as `quay.io/okdp/images/okdp-gitops:<version>`: a SemVer version,
+`.github/workflows/build-image.yml`, run by hand with a version or by
+`release-please.yml` with each release's, publishes it for
+`linux/amd64` and `linux/arm64` as
+`quay.io/okdp/images/okdp-gitops:<version>`: a SemVer version,
 `MAJOR.MINOR.PATCH[-PRERELEASE]`, its leading `v` dropped; another input
 fails the job, no tag pushed. It is the image of the
 jobs of the CI of the output: their runner maps its label `okdp-gitops`

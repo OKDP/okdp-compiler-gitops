@@ -451,7 +451,10 @@ it on each pull request and push to `main`, with govulncheck.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org),
 `!` marking a breaking change of the tree, the output, the command line or
-the library. `docs/` is updated with the code it describes.
+the library. `docs/` is updated with the code it describes. release-please
+(`release-please.yml`) proposes the next version from them, in a pull
+request whose merge tags `vX.Y.Z`: the version of the Go module, of the
+`okdp-compile` archives and of the image.
 
 ## Limitations
 
