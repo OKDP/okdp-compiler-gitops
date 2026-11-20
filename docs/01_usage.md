@@ -440,9 +440,12 @@ refused.
 files of one target. It reads no Git repository and commits nothing:
 a catalog's CI, a person writing a package, a script. It compiles as
 `okdp-gitops compile` does (`deploy.Build`: okdp-compiler's [rule
-set](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md),
-Helm's merge of the final values and the upstream and ingress
-[policy](specs/05_rules.md)).
+set](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md)
+with the [security
+set](https://github.com/OKDP/okdp-compiler-security/blob/main/docs/specs/04_rules.md),
+Helm's merge of the final values, the upstream policy and the render
+([the policy](specs/05_rules.md))). It takes no `--rules`: the sets are
+those of `rules.Standard()`.
 
 ```text
 okdp-compile --repository <dir> [--repository <dir>]...
@@ -897,7 +900,7 @@ client's Secret; the pods that read it do not start before it exists. A
 changed `redirectUris` reaches the provider at the next sync, and a
 `pre-delete` hook (Argo CD `PostDelete`) removes the client and its Secret
 at uninstall ([OAuth
-clients](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md#oauth-clients)).
+clients](https://github.com/OKDP/okdp-compiler-security/blob/main/docs/specs/04_rules.md#oauth-clients)).
 
 **What the instance publishes.** `okdp.info.yaml`, beside its chart: its
 `url`, its `usage`, and `provides`, the connections it provides with
@@ -920,7 +923,7 @@ applies an edit and its check, and commits the change.
 | `gitops` | the stores: `Store` (`View`, a `treeedit.Reader`; `Update`, a `Tx`, a `treeedit.Writer`), `GitStore` (a Git remote, go-git), `MemoryStore`, `Repositories` (the parts of a `Topology`); `Credentials`: the credentials of the repositories, the catalogs and the Forgejo API, the `http://` hosts allowed; `Compiler`: the compile of the tree a store holds (`SkipRender`: no render of the charts, for a long-running process; [the render](specs/05_rules.md#the-render)); `Deployments`: the edits of `treeedit` committed (`Apply`, a method per edit), the reads of the tree and of the output through `treeedit`, the output (`WriteCompiled`); `ForgejoClient`; the workflow of the output (`OutputWorkflow`) |
 | `catalog` | the catalogs of `catalogs.yaml` (each a `treeedit.CatalogRepository`): `Loader` (Git repositories at their ref, local directories), `Catalogs`, indexed by okdp-compiler (`Index`, a `compiler.Catalog`: services, versions, packages, contracts) |
 | `deploy` | `Build(ctx, repos, BuildOptions)`: `compiler.Build` with the compiler's mandatory rule set, Helm's merge and the policy, each unless the caller gives another, the final values checked against the upstream charts of `BuildOptions.Charts` (`SkipRender`: the same `Finalize`, the charts not rendered); `ChartSource` (a `chartcache.Cache`, or `StaticCharts(fsys)`, a directory filled already), `NewCharts(src)`, the `Charts` of one build (`Failures`, `FS`); `CoalesceValues(values, defaults)`: values over a chart's defaults as Helm coalesces them; the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`); `TreeFiles(t, targets, previous, charts)`: the files of a tree; `Write`: those of one compile for a plain `helm install`; `ReadCompiled`, `ReadPublished`, `ReadArgoRoot`, `ProjectAccess`, `CheckReleases` |
-| `rules` | `Standard`: the compiler's mandatory rule set ([the policy](specs/05_rules.md)) |
+| `rules` | `Standard`: the compiler's mandatory rule set with the security set added ([the policy](specs/05_rules.md)) |
 | `treeedit` | the tree read, its edits and their checks: `Reader`, `Writer`, `Apply`, `Check.Verify`, `ReadSources`, `OutputTargets`, `OutputFS`, `WriteOutput` |
 | `chartcache` | the chart cache of the checks, a `deploy.ChartSource` (`Get` pulls a chart it lacks, `FS` gives them): `NewCache`, `NewRepositoryPuller`, set as `Compiler.Charts` |
 

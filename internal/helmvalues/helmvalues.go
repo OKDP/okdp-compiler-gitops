@@ -15,8 +15,9 @@ import (
 	"github.com/okdp/okdp-compiler/chart"
 	"github.com/okdp/okdp-compiler/value"
 
+	"github.com/okdp/okdp-compiler-security/policy"
+
 	"github.com/okdp/okdp-gitops/internal/chartcheck"
-	"github.com/okdp/okdp-gitops/internal/policy"
 	"github.com/okdp/okdp-gitops/internal/render"
 )
 
@@ -48,12 +49,13 @@ func finalize(charts *chartcheck.Charts, rendered bool) compiler.Finalize {
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		// The hosts of the charts' ingresses, those of the objects being the
-		// compile's own; then what the charts a project gives upstream
+		// The rule set's finalValues hook on the final values (the hosts
+		// of the charts' ingresses, those of the objects being the
+		// compile's own); then what the charts a project gives upstream
 		// values to deploy: an early message of the values first, the
 		// render last.
 		if !in.Privileged {
-			if err := policy.CheckIngressValues(ctx, in.Rules, in.Namespace, in.Settings, values); err != nil {
+			if err := checkFinalValues(ctx, in, values); err != nil {
 				return nil, nil, nil, err
 			}
 			if rendered {
@@ -71,13 +73,26 @@ func finalize(charts *chartcheck.Charts, rendered bool) compiler.Finalize {
 	}
 }
 
+// checkFinalValues: the rule set's finalValues hook on values, through
+// in.CheckFinalValues, which a compile always gives and which keeps the
+// compile from running the hook a second time. A caller of the Finalize
+// outside a compile may leave it nil: the hook then runs here
+// (compiler.CheckFinalValues), with no service name, which FinalInput
+// does not hold.
+func checkFinalValues(ctx context.Context, in compiler.FinalInput, values map[string]map[string]any) error {
+	if in.CheckFinalValues != nil {
+		return in.CheckFinalValues(ctx, values)
+	}
+	return compiler.CheckFinalValues(ctx, in.Rules, "", in.Namespace, in.Settings, values)
+}
+
 // CheckRendered: the policy on what the charts of in, an instance of a
 // project that is not privileged, deploy, for each key the instance gives
 // its own upstream values to (package-reviewed charts without them are not
 // rendered): the chart of the key rendered with its final values, in the
 // instance's namespace, under its release (render.Objects), the manifests'
-// objects and hosts checked (compiler.CheckObjects,
-// compiler.CheckIngressHosts). A key whose chart could not be fetched
+// objects checked once, with the rule set's objects hook
+// (compiler.CheckObjects). A key whose chart could not be fetched
 // refuses the instance alone (charts.Failed): what the check would read
 // does not exist, and tenant values cannot be vouched for. The objects
 // chart is the compiler's. No charts (nil), no render: unchecked as the
@@ -104,10 +119,7 @@ func CheckRendered(ctx context.Context, charts *chartcheck.Charts, in compiler.F
 			return fmt.Errorf("upstream.%s: rendering the chart %s with its final values: %w", key, spec.Source.ID(), err)
 		}
 		svc := "upstream." + key + " (rendered)"
-		if err := compiler.CheckObjects(ctx, in.Rules, svc, in.Namespace, objects); err != nil {
-			return err
-		}
-		if err := compiler.CheckIngressHosts(ctx, in.Rules, svc, in.Namespace, in.Settings, objects); err != nil {
+		if err := compiler.CheckObjects(ctx, in.Rules, svc, in.Namespace, in.Settings, objects); err != nil {
 			return err
 		}
 	}

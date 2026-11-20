@@ -48,11 +48,18 @@ first, the settings the packages require (`require` in their
 store, the classes of the claims and their default; and the platform's
 connections, those of its dependencies
 ([fields the compiler reads](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#fields-the-compiler-reads),
-[platform.yaml](specs/01_layout.md#platformyaml)):
+the security set's
+[settings](https://github.com/OKDP/okdp-compiler-security/blob/main/docs/specs/01_inputs_outputs.md#platform-settings),
+[platform.yaml](specs/01_layout.md#platformyaml)). The ingress and the
+OIDC provider are settings of the security set, which okdp-gitops gives
+every compile; `ruleSets` requires it, so that a compile without it is
+refused rather than leaving the hosts unchecked:
 
 ```yaml
 global:
   okdp:
+    ruleSets:
+      - {name: security, version: "^1.0.0"}
     ingress:
       suffix: okdp.example.org
     secrets:

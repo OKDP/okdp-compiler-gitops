@@ -9,7 +9,8 @@ commits the output, which the engine reconciles.
 
 okdp-compiler compiles the tree and holds the mandatory rule set of an
 OKDP platform. okdp-gitops does everything around the compile: it adds
-its policy (upstream values, ingress hosts), checks the final values
+the security set of okdp-compiler-security (upstream values, ingress
+hosts), checks the final values
 against the upstream charts, writes the targets (`helm`, `umbrella`,
 `flux`, `argocd`), reads and commits the Git repositories, and holds the
 edits of the tree the control plane commits.
@@ -134,7 +135,7 @@ output repository and read access to the sources
 | `gitops` | the stores and the topologies, the compile of the tree, the commits of the control plane's edits, the output written to Git, the workflow |
 | `catalog` | the catalog repositories, fetched from Git |
 | `deploy` | `Build`, the compile with the rules, the policy and the checks against the charts; the targets |
-| `rules` | `Standard`, the compiler's mandatory rule set |
+| `rules` | `Standard`, the compiler's mandatory rule set with the security set added |
 | `treeedit` | the tree read, and its edits, each with its check |
 | `chartcache` | the chart cache: the upstream charts pulled from OCI registries and https repositories |
 

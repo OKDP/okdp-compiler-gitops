@@ -6,6 +6,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/okdp/okdp-compiler v0.8.1
+	github.com/okdp/okdp-compiler-security v0.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/rogpeppe/go-internal v1.16.0
@@ -99,4 +100,11 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
+)
+
+// Development pins: the compiler and the security set from the sibling
+// checkouts, until both are released.
+replace (
+	github.com/okdp/okdp-compiler => ../okdp-compiler
+	github.com/okdp/okdp-compiler-security => ../okdp-compiler-security
 )

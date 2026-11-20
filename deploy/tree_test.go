@@ -90,10 +90,10 @@ func (c *charts) Get(_ context.Context, ref compiler.ChartRef) error {
 
 func (c *charts) FS() fs.FS { return c.fsys }
 
-// loadRepository: compiler.LoadRepository, each instance with Helm's merge
-// of the final values.
+// loadRepository: compiler.LoadRepositoryWith the standard rule set, each
+// instance with it and Helm's merge of the final values.
 func loadRepository(repos []compiler.Repository) ([]compiler.Instance, error) {
-	instances, err := compiler.LoadRepository(context.Background(), repos)
+	instances, err := compiler.LoadRepositoryWith(context.Background(), repos, rules.Standard())
 	for i := range instances {
 		instances[i].Inputs.Rules, instances[i].Inputs.Finalize = rules.Standard(), helmvalues.New(nil)
 	}

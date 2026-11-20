@@ -24,7 +24,9 @@ plane.
    most, 64 MiB together, no symbolic link ([the tree](01_layout.md)).
 3. **The load.** `deploy.Build`, `compiler.Build` with the
    compiler's mandatory [rule
-   set](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md),
+   set](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md)
+   and the [security
+   set](https://github.com/OKDP/okdp-compiler-security/blob/main/docs/specs/04_rules.md),
    Helm's merge and the [policy](05_rules.md), of the tree and the
    catalogs, each a `compiler.Repository`
    (`compiler.LoadRepository`, then the compile):

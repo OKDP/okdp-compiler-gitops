@@ -15,7 +15,8 @@ import (
 	"github.com/okdp/okdp-compiler/chart"
 	"github.com/okdp/okdp-compiler/value"
 
-	"github.com/okdp/okdp-gitops/internal/policy"
+	"github.com/okdp/okdp-compiler-security/policy"
+
 	"github.com/okdp/okdp-gitops/internal/render"
 	"github.com/okdp/okdp-gitops/internal/target"
 	"github.com/okdp/okdp-gitops/internal/target/helm"
@@ -69,9 +70,10 @@ func dropResource(b []byte, r string) []byte {
 // holds of ti, a refused instance of a project that is not privileged,
 // files the project's: checked as a compile checks them: of the upstream
 // values it gives, at their paths in what is deployed, the keys and images
-// (policy.UpstreamCheck) and the ingress hosts (policy.CheckIngressValues),
-// and what the charts of the keys it gives values to render
-// (compiler.CheckObjects, compiler.CheckIngressHosts). nil when it passes,
+// (policy.UpstreamCheck) and the rule set's finalValues hook, the ingress
+// hosts (compiler.CheckFinalValues), and what the charts of the keys it
+// gives values to render, with the rule set's objects hook
+// (compiler.CheckObjects). nil when it passes,
 // or when nothing can tell: no output, no chart at hand (charts nil, or
 // a chart it lacks), a chart that does not render (the instance's refusal
 // says why it compiled no further).
@@ -109,7 +111,7 @@ func violation(ti *compiler.TreeInstance, files map[string][]byte, charts fs.FS)
 			}
 		}
 	}
-	if err := policy.CheckIngressValues(ctx, in.Rules, in.Namespace, settings, restricted); err != nil {
+	if err := compiler.CheckFinalValues(ctx, in.Rules, service(ti), in.Namespace, settings, restricted); err != nil {
 		return err
 	}
 	if charts == nil {
@@ -126,14 +128,20 @@ func violation(ti *compiler.TreeInstance, files map[string][]byte, charts fs.FS)
 			continue
 		}
 		svc := "upstream." + key + " (rendered)"
-		if err := compiler.CheckObjects(ctx, in.Rules, svc, in.Namespace, objects); err != nil {
-			return err
-		}
-		if err := compiler.CheckIngressHosts(ctx, in.Rules, svc, in.Namespace, settings, objects); err != nil {
+		if err := compiler.CheckObjects(ctx, in.Rules, svc, in.Namespace, settings, objects); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// service: the service of ti, the name of its package's chart, as a
+// compile names it to the rule set's hooks; "" without a package.
+func service(ti *compiler.TreeInstance) string {
+	if ti.Definition == nil {
+		return ""
+	}
+	return ti.Definition.Chart.Name
 }
 
 // mergedUpstream: the upstream values of the instance of in, by key, its

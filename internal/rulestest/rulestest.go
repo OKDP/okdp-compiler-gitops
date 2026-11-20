@@ -14,7 +14,7 @@ import (
 // Added: a rule set of its own, the mandatory set's rules alone.
 func Added(t *testing.T) *compiler.RuleSet {
 	t.Helper()
-	r, err := compiler.LoadRules(mapfs.FS{"rules.yaml": &mapfs.File{Data: []byte("apiVersion: okdp-compiler/rules.v1\nversion: 1.0.0\n")}})
+	r, err := compiler.LoadRules(mapfs.FS{"rules.yaml": &mapfs.File{Data: []byte("apiVersion: okdp-compiler/rules.v1\nname: rulestest\nversion: 1.0.0\n")}})
 	if err != nil {
 		t.Fatal(err)
 	}

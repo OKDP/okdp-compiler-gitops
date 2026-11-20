@@ -14,10 +14,11 @@ import (
 
 	"github.com/okdp/okdp-compiler/chart"
 
+	"github.com/okdp/okdp-compiler-security/policy"
+
 	"github.com/okdp/okdp-gitops/internal/chartcheck"
 	"github.com/okdp/okdp-gitops/internal/helmvalues"
 	"github.com/okdp/okdp-gitops/internal/output"
-	"github.com/okdp/okdp-gitops/internal/policy"
 	"github.com/okdp/okdp-gitops/internal/target"
 	"github.com/okdp/okdp-gitops/internal/target/argocd"
 	"github.com/okdp/okdp-gitops/internal/target/flux"

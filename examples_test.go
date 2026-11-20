@@ -17,10 +17,11 @@ import (
 	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-compiler/chart"
 
+	"github.com/okdp/okdp-compiler-security/policy"
+
 	"github.com/okdp/okdp-gitops/deploy"
 	"github.com/okdp/okdp-gitops/internal/chartcheck"
 	"github.com/okdp/okdp-gitops/internal/helmvalues"
-	"github.com/okdp/okdp-gitops/internal/policy"
 	"github.com/okdp/okdp-gitops/rules"
 )
 
@@ -37,7 +38,7 @@ const examples = "examples"
 func load(t *testing.T, example string) []compiler.Instance {
 	t.Helper()
 	db := filepath.Join(examples, example, "input", "db")
-	instances, err := compiler.LoadRepository(context.Background(), []compiler.Repository{{Name: db, FS: os.DirFS(db), Role: compiler.RoleTree}})
+	instances, err := compiler.LoadRepositoryWith(context.Background(), []compiler.Repository{{Name: db, FS: os.DirFS(db), Role: compiler.RoleTree}}, rules.Standard())
 	if err != nil {
 		t.Fatal(err)
 	}
