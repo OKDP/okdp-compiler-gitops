@@ -278,5 +278,5 @@ func checkSchema(name string, b []byte, values M) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return s.Validate(name, values)
+	return s.Validate(values)
 }

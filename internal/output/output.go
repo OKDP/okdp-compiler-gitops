@@ -43,7 +43,7 @@ import (
 // an Argo CD target, whose objects share one namespace, a release name
 // two namespaces of t share (a-b/c and a/b-c), compiled or not, keeps
 // each instance of it that compiled, its error wrapping a
-// *target.ReleaseError (compiler.PartialWith), and so their projects, the
+// *target.ReleaseError (compiler.Partial), and so their projects, the
 // rest of t written; then every release of the projects written and of
 // the kept projects' output in previous is in one namespace, else an
 // error wrapping a *target.ReleaseError per release: two releases of one
@@ -80,7 +80,7 @@ func Files(t *compiler.Tree, targets []target.Target, previous, charts fs.FS) (m
 			}
 		}
 	}
-	results, g, kept := compiler.PartialWith(t, also)
+	results, g, kept := compiler.Partial(t, also)
 	if g == nil {
 		return nil, nil, errors.New("the deployment graph has a problem at no instance of the tree")
 	}

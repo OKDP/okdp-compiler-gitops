@@ -27,9 +27,9 @@ for the warnings) and the render. `okdp-compile`, `okdp-gitops compile`
 and the control plane all go through it.
 
 The compiler runs the hooks of the security set itself: the hosts of an
-instance's objects, and those of the final values, which the `Finalize`
-of `internal/helmvalues` checks through `FinalInput.CheckFinalValues`
-after the checks against the charts and before the render.
+instance's objects, and those of the final values, which the compile
+checks on what the `Finalize` of `internal/helmvalues` returns, after
+the checks against the charts and the render.
 
 A program that calls `compiler.Build` or `compiler.Compile` itself
 applies the rule sets it gives, their checks and hooks among them, but

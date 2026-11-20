@@ -69,7 +69,7 @@ var demoProject = map[string]any{"access": map[string]any{"okdp-project-demo": "
 func compiled(t *testing.T) ([]*compiler.Result, *compiler.Graph) {
 	t.Helper()
 	instance := func(pkg, release, namespace string, values map[string]any) compiler.Instance {
-		def, err := compiler.LoadDefinitionWith(packages[pkg], rules.Standard())
+		def, err := compiler.LoadDefinition(packages[pkg], rules.Standard())
 		if err != nil {
 			t.Fatal(err)
 		}

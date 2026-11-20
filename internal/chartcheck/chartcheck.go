@@ -301,7 +301,7 @@ func (u *upstream) check(key string, ref chart.Ref, final M, appended [][]string
 	if u.err != nil {
 		return "", nil, u.err
 	}
-	v, err := u.compiled.Validate(name, values)
+	v, err := u.compiled.Validate(values)
 	return v, warnings, err
 }
 

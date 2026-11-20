@@ -49,19 +49,12 @@ func finalize(charts *chartcheck.Charts, rendered bool) compiler.Finalize {
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		// The rule set's finalValues hook on the final values (the hosts
-		// of the charts' ingresses, those of the objects being the
-		// compile's own); then what the charts a project gives upstream
-		// values to deploy: an early message of the values first, the
-		// render last.
-		if !in.Privileged {
-			if err := checkFinalValues(ctx, in, values); err != nil {
+		// What the charts a project gives upstream values to deploy. The
+		// compile then runs the rule set's finalValues hook on the values
+		// returned (the hosts of the charts' ingresses).
+		if !in.Privileged && rendered {
+			if err := CheckRendered(ctx, charts, in, values); err != nil {
 				return nil, nil, nil, err
-			}
-			if rendered {
-				if err := CheckRendered(ctx, charts, in, values); err != nil {
-					return nil, nil, nil, err
-				}
 			}
 		}
 		// A literal of the instance's upstream values at a sensitive key, a
@@ -71,19 +64,6 @@ func finalize(charts *chartcheck.Charts, rendered bool) compiler.Finalize {
 		}
 		return values, final.Charts, warnings, nil
 	}
-}
-
-// checkFinalValues: the rule set's finalValues hook on values, through
-// in.CheckFinalValues, which a compile always gives and which keeps the
-// compile from running the hook a second time. A caller of the Finalize
-// outside a compile may leave it nil: the hook then runs here
-// (compiler.CheckFinalValues), with no service name, which FinalInput
-// does not hold.
-func checkFinalValues(ctx context.Context, in compiler.FinalInput, values map[string]map[string]any) error {
-	if in.CheckFinalValues != nil {
-		return in.CheckFinalValues(ctx, values)
-	}
-	return compiler.CheckFinalValues(ctx, in.Rules, "", in.Namespace, in.Settings, values)
 }
 
 // CheckRendered: the policy on what the charts of in, an instance of a

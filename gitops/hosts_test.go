@@ -9,9 +9,10 @@ import (
 	"github.com/okdp/okdp-gitops/deploy"
 )
 
-// TestCompilerHosts: the hosts of an instance's final values are checked
-// before the objects its chart renders with them, both with the platform's
-// settings; SkipRender keeps the check of the values.
+// TestCompilerHosts: the objects an instance's chart renders with its
+// final values are checked before the hosts of those values (the
+// compile's finalValues hook runs after Finalize), both with the
+// platform's settings; SkipRender keeps the check of the values.
 func TestCompilerHosts(t *testing.T) {
 	charts := fstest.MapFS{
 		"charts.example.org/app-1.0.0/app/Chart.yaml":  {Data: []byte("apiVersion: v2\nname: app\nversion: 1.0.0\n")},
@@ -46,7 +47,7 @@ spec:
 		"served":            {"upstream:\n  app:\n    ingress: {host: web.demo.okdp.sandbox}\n    renderHost: web.demo.okdp.sandbox\n", "", ""},
 		"a host of a value": {"upstream:\n  app:\n    ingress: {host: web.example.org}\n", valuesHost, valuesHost},
 		"a host rendered":   {"upstream:\n  app:\n    renderHost: other.example.org\n", renderedHost, ""},
-		"the values first":  {"upstream:\n  app:\n    ingress: {host: web.example.org}\n    renderHost: other.example.org\n", valuesHost, valuesHost},
+		"the render first":  {"upstream:\n  app:\n    ingress: {host: web.example.org}\n    renderHost: other.example.org\n", renderedHost, valuesHost},
 	} {
 		t.Run(name, func(t *testing.T) {
 			for _, skip := range []bool{false, true} {
