@@ -411,14 +411,14 @@ func index(repos []Repository) (*parts, error) {
 	repos = slices.SortedFunc(slices.Values(repos), func(a, b Repository) int { return strings.Compare(a.Name, b.Name) })
 	t := &parts{projects: map[string]*Repository{}, packages: map[[2]string]*compiler.Definition{}}
 	var errs []error
-	var catalogs []compiler.Repository
+	var catalogs []compiler.CatalogFiles
 	owners := map[string][]string{} // a part, as messages name it: the repositories that have it
 	own := func(part string, repo *Repository) { owners[part] = append(owners[part], repo.Name) }
 	for i := range repos {
 		repo := &repos[i]
 		switch repo.Role {
 		case RoleTree, RoleCatalog:
-			catalogs = append(catalogs, compiler.Repository{Name: repo.Name, FS: catalogView{repo.FS}, Role: compiler.RoleCatalog})
+			catalogs = append(catalogs, compiler.CatalogFiles{Name: repo.Name, FS: catalogView{repo.FS}})
 		case "":
 			errs = append(errs, fmt.Errorf("repository %s: no role (Repository.Role): %s, a part of the deployment, or %s, packages and contracts only", repo.Name, RoleTree, RoleCatalog))
 			continue
