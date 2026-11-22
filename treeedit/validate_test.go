@@ -1,6 +1,8 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"github.com/okdp/okdp-gitops/deploy"
 	"maps"
@@ -16,8 +18,8 @@ import (
 // compileReader compiles the tree r holds through the Reader alone, its
 // platform.yaml and projects/, with the test catalog: compile for a
 // Reader that is no memTree.
-func compileReader(r Reader) (*compiler.Tree, error) {
-	tree := fstest.MapFS{}
+func compileReader(r Reader) (*tree.Tree, error) {
+	src := fstest.MapFS{}
 	var walk func(dir string) error
 	walk = func(dir string) error {
 		names, err := r.ReadDir(dir)
@@ -27,22 +29,22 @@ func compileReader(r Reader) (*compiler.Tree, error) {
 		for _, n := range names {
 			p := path.Join(dir, n)
 			if data, err := r.ReadFile(p); err == nil {
-				tree[p] = &fstest.MapFile{Data: data}
+				src[p] = &fstest.MapFile{Data: data}
 			} else if err := walk(p); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
-	if data, err := r.ReadFile(compiler.PlatformFile); err == nil {
-		tree[compiler.PlatformFile] = &fstest.MapFile{Data: data}
+	if data, err := r.ReadFile(tree.PlatformFile); err == nil {
+		src[tree.PlatformFile] = &fstest.MapFile{Data: data}
 	}
-	if err := walk(compiler.ProjectsDir); err != nil {
+	if err := walk(tree.ProjectsDir); err != nil {
 		return nil, err
 	}
-	return deploy.Build(context.Background(), []compiler.Repository{
-		{Name: ".", FS: tree, Role: compiler.RoleTree},
-		{Name: "test-charts", FS: os.DirFS(catalogFixture), Role: compiler.RoleCatalog},
+	return deploy.Build(context.Background(), []tree.Repository{
+		{Name: ".", FS: src, Role: tree.RoleTree},
+		{Name: "test-charts", FS: os.DirFS(catalogFixture), Role: tree.RoleCatalog},
 	}, deploy.BuildOptions{})
 }
 
@@ -50,7 +52,7 @@ func compileReader(r Reader) (*compiler.Tree, error) {
 // parameter path, and the tree is left as it is.
 func TestValidateInstance(t *testing.T) {
 	s := newStore(t)
-	before := s.tree.files()
+	before := s.src.files()
 	web := Instance{Project: "demo", Name: "web", Service: "app", Version: "1.0.0"}
 	for _, c := range []struct {
 		name    string
@@ -67,7 +69,7 @@ func TestValidateInstance(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			inst := web
 			inst.Values = c.values
-			fields, _, err := ValidateInstance(s.tree, compileReader, inst)
+			fields, _, err := ValidateInstance(s.src, compileReader, inst)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -83,11 +85,11 @@ func TestValidateInstance(t *testing.T) {
 		})
 	}
 	// An update: the instance's directory is there.
-	fields, _, err := ValidateInstance(s.tree, compileReader, Instance{Project: "demo", Name: "legacy", Service: "app", Version: "1.0.0", Values: map[string]any{"database": "gone"}})
+	fields, _, err := ValidateInstance(s.src, compileReader, Instance{Project: "demo", Name: "legacy", Service: "app", Version: "1.0.0", Values: map[string]any{"database": "gone"}})
 	if err != nil || len(fields) != 1 || fields[0].Path != "database" {
 		t.Fatalf("an update: %+v %v", fields, err)
 	}
-	if !maps.Equal(before, s.tree.files()) {
+	if !maps.Equal(before, s.src.files()) {
 		t.Error("a validation changed the tree")
 	}
 }
@@ -96,25 +98,25 @@ func TestValidateInstance(t *testing.T) {
 // claims.<name>.
 func TestValidateClaim(t *testing.T) {
 	s := newStore(t)
-	fields, _, err := ValidateClaim(s.tree, compileReader, "demo", compiler.ClaimSpec{Name: "analytics", Contract: "database-server", Class: "huge"})
+	fields, _, err := ValidateClaim(s.src, compileReader, "demo", compiler.ClaimSpec{Name: "analytics", Contract: "database-server", Class: "huge"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(fields) == 0 || fields[0].Path != "claims.analytics" || !strings.Contains(fields[0].Message, `class "huge"`) {
 		t.Fatalf("field errors = %+v", fields)
 	}
-	fields, _, err = ValidateClaim(s.tree, compileReader, "demo", compiler.ClaimSpec{Name: "batch", Contract: "database-server"})
+	fields, _, err = ValidateClaim(s.src, compileReader, "demo", compiler.ClaimSpec{Name: "batch", Contract: "database-server"})
 	if err != nil || fields != nil {
 		t.Fatalf("a new claim of the default class: %+v %v", fields, err)
 	}
 	// A project without instance: its claims checked at their declaration
 	// all the same, bound to none.
-	s.tree["projects/idle/project.yaml"] = []byte("description: no instance yet\n")
-	fields, _, err = ValidateClaim(s.tree, compileReader, "idle", compiler.ClaimSpec{Name: "analytics", Contract: "database-server", Class: "huge"})
+	s.src["projects/idle/project.yaml"] = []byte("description: no instance yet\n")
+	fields, _, err = ValidateClaim(s.src, compileReader, "idle", compiler.ClaimSpec{Name: "analytics", Contract: "database-server", Class: "huge"})
 	if err != nil || len(fields) == 0 || fields[0].Path != "claims.analytics" || !strings.Contains(fields[0].Message, `class "huge"`) {
 		t.Fatalf("a project without instance: %+v %v", fields, err)
 	}
-	if fields, _, err = ValidateClaim(s.tree, compileReader, "idle", compiler.ClaimSpec{Name: "batch", Contract: "database-server"}); err != nil || fields != nil {
+	if fields, _, err = ValidateClaim(s.src, compileReader, "idle", compiler.ClaimSpec{Name: "batch", Contract: "database-server"}); err != nil || fields != nil {
 		t.Fatalf("a project without instance, a claim of the default class: %+v %v", fields, err)
 	}
 }

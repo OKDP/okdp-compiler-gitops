@@ -1,5 +1,5 @@
 // Package treeedit: the reads and the edits of a tree as written
-// (compiler.LoadRepository reads it), for a caller that edits the tree,
+// (tree.Load reads it), for a caller that edits the tree,
 // a control plane, and keeps it where it likes (Git): every rule of an
 // edit is here, the caller holds the files.
 //
@@ -25,6 +25,8 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"bytes"
 	"reflect"
 	"slices"
@@ -32,7 +34,6 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-compiler/chart"
 )
 
@@ -41,13 +42,13 @@ import (
 // instances may claim of it from another namespace (namespace names, or
 // "*"), nil when absent (its package's then), empty for none
 // (claimers: []).
-type InstanceSpec = compiler.InstanceSpec
+type InstanceSpec = tree.InstanceSpec
 
 // ParseInstance: an instance.yaml as the compile reads it, strictly: a
 // key it does not know refused; claimers nil when absent, empty for
 // "claimers: []". Its checks (service and version required, the
 // claimers) are the compile's.
-func ParseInstance(raw []byte) (InstanceSpec, error) { return compiler.ParseInstance(raw) }
+func ParseInstance(raw []byte) (InstanceSpec, error) { return tree.ParseInstance(raw) }
 
 // EncodeInstance: the instance.yaml of spec: service, version, and its
 // claimers when not nil, "claimers: []" for none.
@@ -121,17 +122,17 @@ func RoundTrip(values map[string]any) map[string]any {
 }
 
 // ReadDescription: a project's description, the key
-// compiler.ProjectDescription of its project.yaml, raw: the project's
+// tree.ProjectDescription of its project.yaml, raw: the project's
 // own, which the compile leaves out of the context of its instances. A
 // file that is not YAML has none: the compile reports it.
 func ReadDescription(raw []byte) string {
 	values, _ := DecodeValues(raw)
-	d, _ := values[compiler.ProjectDescription].(string)
+	d, _ := values[tree.ProjectDescription].(string)
 	return strings.TrimSpace(d)
 }
 
 // WriteDescription: raw, a project's project.yaml, with description, on
-// one line, as its key compiler.ProjectDescription, first when new, the
+// one line, as its key tree.ProjectDescription, first when new, the
 // rest of the file kept; an empty description removes the key. An empty
 // file is {}. file names it in messages.
 func WriteDescription(raw []byte, file, description string) ([]byte, error) {
@@ -139,7 +140,7 @@ func WriteDescription(raw []byte, file, description string) ([]byte, error) {
 	if description = strings.Join(strings.Fields(description), " "); description != "" {
 		value = str(description)
 	}
-	return EditKey(raw, file, compiler.ProjectDescription, value)
+	return EditKey(raw, file, tree.ProjectDescription, value)
 }
 
 // MergeDocument: updated written over the YAML document raw, top-level

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"errors"
 	"reflect"
 	"testing"
@@ -14,10 +16,10 @@ import (
 func TestReportGraph(t *testing.T) {
 	r := newReport()
 	r.add(compiler.Instance{Name: "web", Inputs: compiler.Inputs{Namespace: "demo", Release: "demo-web"}}, compiler.Outcome{Result: &compiler.Result{Namespace: "demo", Release: "demo-web", Service: "web", Version: "1.0.0"}})
-	node := compiler.GraphNode{Namespace: "demo", Release: "demo-web"}
-	r.graphError(&compiler.GraphError{Node: node, Err: errors.New("a cycle")})
-	r.graphError(&compiler.GraphError{Node: node, Err: errors.New("a dependency")})
-	r.graphError(&compiler.GraphError{Node: compiler.GraphNode{Namespace: "demo", Release: "demo-gone"}, Err: errors.New("x")})
+	node := tree.GraphNode{Namespace: "demo", Release: "demo-web"}
+	r.graphError(&tree.GraphError{Node: node, Err: errors.New("a cycle")})
+	r.graphError(&tree.GraphError{Node: node, Err: errors.New("a dependency")})
+	r.graphError(&tree.GraphError{Node: tree.GraphNode{Namespace: "demo", Release: "demo-gone"}, Err: errors.New("x")})
 	r.graphError(errors.New("y"))
 	if ir := r.Instances[0]; ir.Status != statusRefused || ir.Error != "a cycle\na dependency" {
 		t.Errorf("the instance: %+v", ir)

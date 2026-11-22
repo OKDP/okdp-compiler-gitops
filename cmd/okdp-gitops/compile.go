@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"fmt"
 	"os"
@@ -10,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-gitops/chartcache"
 	"github.com/okdp/okdp-gitops/treeedit"
 
@@ -147,7 +148,7 @@ func (c compilation) run(ctx context.Context) (int, error) {
 		}
 	}
 
-	var kept []compiler.KeptProject
+	var kept []tree.Kept
 	_, err = d.Store.Update(ctx, gitops.Commit{Subject: "okdp: compile"}, func(tx gitops.Tx) error {
 		var err error
 		kept, err = d.WriteCompiled(ctx, tx)
@@ -211,8 +212,8 @@ func (c compilation) run(ctx context.Context) (int, error) {
 // was, and why: every problem, one per line; then, a line each, the
 // revision of its sources the kept output is the compile of (since, the
 // output's record) and the count of its files written all the same, of
-// today's settings (compiler.KeptProject.Rederived).
-func reportKept(kept []compiler.KeptProject, since func(project string) (revision, bool)) {
+// today's settings (tree.Kept.Rederived).
+func reportKept(kept []tree.Kept, since func(project string) (revision, bool)) {
 	var names, problems []string
 	for _, k := range kept {
 		names = append(names, k.Namespace)

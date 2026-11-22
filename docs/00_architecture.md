@@ -4,7 +4,7 @@ How okdp-gitops works. What it reads and writes is specified in
 [the tree](specs/01_layout.md), [the compile](specs/02_compile.md),
 [the output](specs/03_output.md), [topologies](specs/04_topology.md) and
 [the policy](specs/05_rules.md);
-how the tree compiles, in okdp-compiler's
+how an instance compiles, in okdp-compiler's
 [architecture](https://github.com/OKDP/okdp-compiler/blob/main/docs/00_architecture.md).
 
 ## Position in OKDP
@@ -31,10 +31,10 @@ flowchart LR
 ```
 
 [okdp-compiler](https://github.com/OKDP/okdp-compiler) compiles: it
-reads the tree, binds each claim to its provider, compiles every
-instance with what the others publish, merges its final values as Helm
-does, and orders the releases; it reads no upstream chart. okdp-gitops
-is what surrounds that: the security set added to the compiler's rule
+binds each claim to its provider, compiles every instance with what the
+others publish and merges its final values as Helm does; it reads no
+upstream chart. okdp-gitops is what surrounds that: the tree it reads
+and the releases it orders (package `tree`), the security set added to the compiler's rule
 set and its upstream policy, wired in its compiles
 ([okdp-compiler-security](https://github.com/OKDP/okdp-compiler-security)),
 the render of the upstream charts, the checks of the final values
@@ -69,19 +69,20 @@ the latest sources.
 | `cmd/okdp-gitops/topology.go`, `cmd/okdp-gitops/workflow.go` | the io topology of `--tree` and `--output`, the path of a directory in its repository; `okdp-gitops workflow` |
 | `cmd/okdp-compile/` | the binary that compiles local directories: its flags, `deploy.Build`, the bindings, refusals and dependencies printed, `--partial`, `--report` |
 | `cmd/okdp-gitops/sources.go` | the record of the output, `sources.yaml`: what a compile read (`record`, `writeRecord`), the run that stops when it holds (`upToDate`, the refs listed without a fetch, `listRefs`); the revision a kept project's output is the compile of, reported (`keptSince`, `reportKept`) |
-| `deploy/` | `Build`, `compiler.Build` with the standard rule set (`rules.Standard`), `helmvalues.New` (`helmvalues.WithoutRender` with `BuildOptions.SkipRender`) and the security set's `policy.CheckGlobals`, each unless the caller gives another, and with `BuildOptions.Charts` the upstream charts of every `Chart.yaml` of the tree fetched before the compile (`compiler.BuildOptions.Loaded`); `ChartSource`, `Charts`, `StaticCharts`, `NewCharts`, `CoalesceValues`; the targets, `TreeFiles`, the files of a compile, and what reads them back |
+| `deploy/` | `Build`, `tree.Build` with the standard rule set (`rules.Standard`), `helmvalues.New` (`helmvalues.WithoutRender` with `BuildOptions.SkipRender`) and the security set's `policy.CheckGlobals`, each unless the caller gives another, and with `BuildOptions.Charts` the upstream charts of every `Chart.yaml` of the tree fetched before the compile (`tree.BuildOptions.Loaded`); `ChartSource`, `Charts`, `StaticCharts`, `NewCharts`, `CoalesceValues`; the targets, `TreeFiles`, the files of a compile, and what reads them back |
 | `rules/` | `Standard`, the compiler's mandatory rule set with the security set added (`security.Rules`), and `Or`, a caller's set or it |
+| `tree/` | the tree of the deployments loaded from its repositories (`Load`, `LoadProjects`: the parts and their roles, `platform.yaml`, `project.yaml`, the instances' files, `catalogs.yaml` and its menu, `CheckMenu`), the packages and contracts through `compiler.LoadCatalog` on each repository's `catalog/` and `contracts/`; compiled together (`Compile`: `compiler.CompileAll`, then the deployment graph, `internal/graph`, `NewGraph`); `Build`, the load and the compile with `BuildOptions`; the projects kept (`Partial`), what a change broke (`Regressions`), the problems of a load (`LoadError`, `AddedProblems`, `LoadErrorOf`) |
 | `treeedit/` | the tree read (`ReadSources`, the readers), the edits and their checks (`Apply`, `Check.Verify`), the output as a tree (`OutputTargets`, `OutputFS`, `WriteOutput`) |
 | `chartcache/` | the chart cache, a chart source (`Get`, `FS`): a chart pulled once and kept whole, with its archive, bounded (`NewCache`, `NewRepositoryPuller`, `Archive`); `ChartDir`, `chartdir.Of` |
 | `internal/chartcheck/` | the final values checked against the upstream charts, which the compiler does not read: `Source` (`Get`, `FS`), `Static`, a cache filled already; `Charts`, the charts of one build (`New`, `Fetch`, `Failed`, `Failures`, `FS`, `Check`); `Coalesce`, Helm's `chartutil.CoalesceValues` |
 | `internal/chartdir/` | the layout of a chart cache, `Of` (`<repository without scheme>/<chart>-<version>/<chart>`), and the `helm pull` that fills it by hand, `Pull` |
 | `internal/render/` | a chart rendered with its final values (Helm SDK, no cluster), read at its `chartdir.Of`, checked by `internal/helmvalues` (the render's policy) |
 | `internal/target/` | the targets: `helm` (`Target`, values; `Umbrella`, a chart), `flux`, `argocd`, and what they share (a project's manifests, the directories, the checks of their options) |
-| `internal/output/` | the files of a tree for its targets, the projects kept (`compiler.Partial`) and what is re-derived of them |
+| `internal/output/` | the files of a tree for its targets, the projects kept (`tree.Partial`) and what is re-derived of them |
 | `internal/helmvalues/` | `compiler.FinalValues` with the security set's `policy.UpstreamCheck`, then `Charts.Check`, then `CheckRendered` and `policy.PlainUpstream`, the compile running the hook `finalValues` on what it returns; `CheckRendered`, the charts a project gives upstream values to rendered, refused when they could not be fetched, their manifests through `compiler.CheckObjects` |
 | `internal/outdir/`, `internal/dirfs/`, `internal/helmtest/` | the output directory of `okdp-compile` and its mark; the directories it reads, bounded, no symbolic link followed; the tests' Helm |
 | `gitops/tree.go` | `Compiler`: the catalogs of `catalogs.yaml` opened (`treeedit.ReadCatalogRepositories`), the tree read (`treeedit.ReadSources`, bounded: `platform.yaml`, `catalogs.yaml`, whose menu the compile checks, `projects/`; `MaxTreeFileSize`, `MaxTreeSize` are its bounds under the names of this package), `deploy.Build` (with the chart source, `deploy.NewCharts` for each build); the compiles kept (`memoKey`), but one with a chart that could not be fetched, which is logged per chart and per instance key; a `catalogs.yaml` checked as the compile checks it (`CheckCatalogs`, `treeedit.CheckCatalogs`) |
-| `gitops/output.go` | `WriteCompiled`: the compile, the targets of the output (`treeedit.OutputTargets`: `argocd/root.yaml` read by `deploy.ReadArgoRoot`), `deploy.TreeFiles` over `treeedit.OutputFS` (`compiled/` of a transaction as an `fs.FS`), with the charts of `Compiler.Charts` that the withdrawal of a refused instance renders, and `compiled/` rewritten (`treeedit.WriteOutput`), the projects with a problem kept as they were (`compiler.KeptProject`); no choice of files or targets is made here, they are `deploy`'s |
+| `gitops/output.go` | `WriteCompiled`: the compile, the targets of the output (`treeedit.OutputTargets`: `argocd/root.yaml` read by `deploy.ReadArgoRoot`), `deploy.TreeFiles` over `treeedit.OutputFS` (`compiled/` of a transaction as an `fs.FS`), with the charts of `Compiler.Charts` that the withdrawal of a refused instance renders, and `compiled/` rewritten (`treeedit.WriteOutput`), the projects with a problem kept as they were (`tree.Kept`); no choice of files or targets is made here, they are `deploy`'s |
 | `gitops/deployments.go` | `Deployments`: an edit of `treeedit` committed (`Apply`: `treeedit.Apply` in a transaction, the compile of the tree before and after the change, the warnings logged, one commit per repository named after the edit, `NewCommit`), a method per edit and per reader, each a call of `treeedit` in a transaction or a view; a project of a split topology, its repository created first (`ForgejoClient`, `Topology.ProjectRepository`) |
 | `gitops/layout.go` | the output's names, `CompiledDir` (`treeedit.CompiledDir`), `SourcesFile` |
 | `gitops/store.go` | `Store` (its reads a `treeedit.Reader`), `Tx` (a `treeedit.Writer`); the errors of Git (`ErrConflict`, `ErrMoved`; `ErrSymlink` and `ErrTooLarge` are `treeedit` errors); the commits (`Commit`, `NewCommit`, `Program`) |
@@ -100,10 +101,10 @@ the latest sources.
 flowchart TD
   read["the repositories of the topology<br/>read into memory"] --> cats["the catalogs of catalogs.yaml<br/>fetched (catalog.Loader)"]
   cats --> load["deploy.Build<br/>the tree, the catalogs, the rule set<br/>(the chart cache), its graph"]
-  load -- problems --> fail["compiler.LoadError: every problem<br/>nothing written"]
+  load -- problems --> fail["tree.LoadError: every problem<br/>nothing written"]
   load --> files["deploy.TreeFiles<br/>the Flux target, the Argo CD target<br/>(argocd/root.yaml)"]
   files -- "a release a kept output holds, written again" --> fail
-  files -- "an instance refused, a problem of the graph,<br/>a release in two projects" --> kept["its project kept, and those<br/>that depend on it (compiler.Partial)"]
+  files -- "an instance refused, a problem of the graph,<br/>a release in two projects" --> kept["its project kept, and those<br/>that depend on it (tree.Partial)"]
   kept --> write
   files --> write["compiled/ rewritten,<br/>the kept projects' directories as they were"]
   write --> diff["the changed files<br/>written, or committed on the revision read"]
@@ -114,14 +115,14 @@ flowchart TD
 the tree from and writes the output to: `Compiler.Compile` (the steps of
 [the compile](specs/02_compile.md#the-steps)), then `deploy.TreeFiles` of
 the Flux target and, when `argocd/root.yaml` names its source, the Argo CD
-target: the projects kept (`compiler.Partial`: an instance refused, then
+target: the projects kept (`tree.Partial`: an instance refused, then
 those at which the graph has a problem, or that depend on one of them),
 the files of the targets for the projects written, merged, the files of
 the kept projects as `compiled/` has them (`treeedit.OutputFS`), the root
 `projects/kustomization.yaml` listing the kept ones whose
 `kustomization.yaml` it holds, every release in one project; then
 `compiled/` removed and written again. The targets write every byte;
-okdp-compiler decides which projects are kept (`compiler.Partial`).
+`tree.Partial` decides which projects are kept.
 
 The binary (`cmd/okdp-gitops`) reads each repository whole into a
 `MemoryStore`, the output's first: when its record, `sources.yaml`,
@@ -203,12 +204,13 @@ the run start again, every repository read anew, up to 5 times.
 
 ### The compiler compiles, okdp-gitops deploys
 
-The compiler holds what a claim needs to bind: the tree, the packages,
-the context, the claims, the dependencies and their order, Helm's merge
-of the final values. Everything else about a platform is here: the
-rules, as data and as a policy over the final values, the checks of the
-final values against the upstream charts, and the files a deployer
-reads. A CLI run and the control plane's checks agree by
+The compiler holds what a claim needs to bind: the packages, the
+context, the claims, the dependencies, Helm's merge of the final values.
+Everything else about a platform is here: the tree and its layout
+(package `tree`: its repositories and their roles, the instances' files,
+the order of the releases, the projects kept), the rules, as data and as
+a policy over the final values, the checks of the final values against
+the upstream charts, and the files a deployer reads. A CLI run and the control plane's checks agree by
 construction, each compiling with `deploy.Build`. It gives the compiler
 the files the topology spreads over repositories, and commits the files
 of its targets. The rest is what Git needs: where each part is, the
@@ -226,7 +228,7 @@ bounds, which the compiler holds none of. `deploy.Build` with
 `chartcache.Cache`, which pulls, or `deploy.StaticCharts`, a directory
 filled already) fetches the charts of every `Chart.yaml` of the tree
 once the tree loads, before any instance compiles
-(`compiler.BuildOptions.Loaded`): no fetch counts against an instance's
+(`tree.BuildOptions.Loaded`): no fetch counts against an instance's
 timeout, and the tree compiles once. A `Charts` is one build's: each
 chart fetched once, read once, its schema compiled once; a context that
 ends is not recorded as a failure.

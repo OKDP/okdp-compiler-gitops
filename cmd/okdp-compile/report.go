@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -134,7 +136,7 @@ func (r *report) instance(in compiler.Instance) *instanceReport {
 // namespaces share, the instance of its release refused, its error
 // joined to any other; a tree error when no instance has the release.
 func (r *report) graphError(err error) {
-	if ge, ok := errors.AsType[*compiler.GraphError](err); ok {
+	if ge, ok := errors.AsType[*tree.GraphError](err); ok {
 		for _, ir := range r.Instances {
 			if ir.Namespace == ge.Node.Namespace && ir.Release == ge.Node.Release {
 				ir.Status = statusRefused

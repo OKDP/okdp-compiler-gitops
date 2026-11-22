@@ -1,7 +1,7 @@
 // Package catalog fetches the catalogs of OKDP packages: git repositories
 // holding one directory per package version, the packages okdp-compiler
 // compiles, and the contracts their connections follow, parts of the tree
-// compiler.LoadRepository reads, which okdp-compiler indexes
+// tree.Load reads, which okdp-compiler indexes
 // (Catalogs.Index):
 //
 //	catalog/<service>/<version>/        one package version (Chart.yaml, okdp.yaml, values.cel.yaml...)
@@ -18,6 +18,8 @@
 package catalog
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"io/fs"
 
 	compiler "github.com/okdp/okdp-compiler"
@@ -46,9 +48,9 @@ func (c *Catalogs) List() []Catalog { return append([]Catalog(nil), c.list...) }
 // their services and versions, the files of a package, the contracts, as
 // a compile of the tree reads them.
 func (c *Catalogs) Index() (*compiler.Catalog, error) {
-	repos := make([]compiler.Repository, 0, len(c.list))
+	repos := make([]tree.Repository, 0, len(c.list))
 	for _, cat := range c.list {
-		repos = append(repos, compiler.Repository{Name: cat.Name, FS: cat.FS, Role: compiler.RoleCatalog})
+		repos = append(repos, tree.Repository{Name: cat.Name, FS: cat.FS, Role: tree.RoleCatalog})
 	}
-	return compiler.LoadCatalog(repos)
+	return tree.LoadCatalog(repos)
 }

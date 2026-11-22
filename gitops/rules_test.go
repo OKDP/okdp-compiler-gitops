@@ -1,6 +1,8 @@
 package gitops
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"strings"
 	"testing"
@@ -17,9 +19,9 @@ import (
 func TestCompilerRules(t *testing.T) {
 	set := rulestest.Added(t)
 	var got *compiler.RuleSet
-	c := &Compiler{Rules: set, build: func(_ context.Context, _ []compiler.Repository, o deploy.BuildOptions) (*compiler.Tree, error) {
+	c := &Compiler{Rules: set, build: func(_ context.Context, _ []tree.Repository, o deploy.BuildOptions) (*tree.Tree, error) {
 		got = o.Rules
-		return &compiler.Tree{}, nil
+		return &tree.Tree{}, nil
 	}}
 	if _, _, err := c.buildTree(t.Context(), nil); err != nil || got != set {
 		t.Errorf("the compile's rule set: %p, %v", got, err)
@@ -44,7 +46,7 @@ func TestCompilerSkipRender(t *testing.T) {
 		"charts.example.org/app-1.0.0/app/values.yaml":      {Data: []byte("{}\n")},
 		"charts.example.org/app-1.0.0/app/templates/t.yaml": {Data: []byte(`{{ fail "the chart was rendered" }}`)},
 	}
-	tree := func(config string) fstest.MapFS {
+	src := func(config string) fstest.MapFS {
 		return fstest.MapFS{
 			"platform.yaml":                             {Data: []byte("global:\n  okdp:\n    ingress: {suffix: okdp.sandbox}\n")},
 			"catalog/app/1.0.0/Chart.yaml":              {Data: []byte("apiVersion: v2\nname: app\nversion: 1.0.0\ndependencies:\n  - {name: app, repository: https://charts.example.org, version: 1.0.0}\n")},
@@ -54,15 +56,15 @@ func TestCompilerSkipRender(t *testing.T) {
 			"projects/demo/instances/web/config.yaml":   {Data: []byte(config)},
 		}
 	}
-	compile := func(c *Compiler, tree fstest.MapFS) error {
+	compile := func(c *Compiler, src fstest.MapFS) error {
 		t.Helper()
-		got, _, err := c.buildTree(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}})
+		got, _, err := c.buildTree(t.Context(), []tree.Repository{{Name: ".", FS: src, Role: tree.RoleTree}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return got.Instance("demo", "web").Err()
 	}
-	given := tree("upstream:\n  app:\n    something: 1\n")
+	given := src("upstream:\n  app:\n    something: 1\n")
 
 	rendering := NewCompiler(&catalog.Loader{})
 	rendering.Charts = deploy.StaticCharts(charts)
@@ -76,7 +78,7 @@ func TestCompilerSkipRender(t *testing.T) {
 	if err := compile(skipping, given); err != nil {
 		t.Errorf("SkipRender: %v", err)
 	}
-	if err := compile(skipping, tree("upstream:\n  app:\n    extraResources: [{kind: ConfigMap}]\n")); err == nil || !strings.Contains(err.Error(), "extraResources is denied") {
+	if err := compile(skipping, src("upstream:\n  app:\n    extraResources: [{kind: ConfigMap}]\n")); err == nil || !strings.Contains(err.Error(), "extraResources is denied") {
 		t.Errorf("the checks of the values stay: %v", err)
 	}
 }

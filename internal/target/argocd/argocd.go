@@ -12,6 +12,8 @@
 package argocd
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"errors"
 	"path"
 	"slices"
@@ -57,7 +59,7 @@ type Target struct {
 
 // Files: the helm target's files, then, in each instance's
 // target.InstanceDir, its ApplicationFile (Application), its sync wave
-// the release's (compiler.Graph.Wave), and in each project's
+// the release's (tree.Graph.Wave), and in each project's
 // target.ProjectManifests, its manifests (ProjectManifests), each marked
 // generated (target.Generated). The options are checked first; two
 // releases of one name in two namespaces are refused: their Applications
@@ -67,7 +69,7 @@ type Target struct {
 // being named after the releases, <project>-<instance>, the AppProjects
 // project-<namespace>: an Application okdp-instances would be the
 // release of the instance instances of a project okdp.
-func (t Target) Files(results []*compiler.Result, g *compiler.Graph) (map[string][]byte, error) {
+func (t Target) Files(results []*compiler.Result, g *tree.Graph) (map[string][]byte, error) {
 	if err := t.check(); err != nil {
 		return nil, err
 	}
@@ -83,7 +85,7 @@ func (t Target) Files(results []*compiler.Result, g *compiler.Graph) (map[string
 	}
 	for _, res := range results {
 		dir := target.InstanceDir(res.Namespace, res.Release)
-		wave := g.Wave(compiler.GraphNode{Namespace: res.Namespace, Release: res.Release})
+		wave := g.Wave(tree.GraphNode{Namespace: res.Namespace, Release: res.Release})
 		files[path.Join(dir, ApplicationFile)] = append([]byte(target.Generated), t.Application(res.Namespace, res.Release, path.Join(t.PathPrefix, dir), wave)...)
 	}
 	for _, p := range target.Projects(results) {

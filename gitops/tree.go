@@ -1,6 +1,8 @@
 package gitops
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -65,7 +67,7 @@ type Compiler struct {
 	inflight map[string]*flight
 	// build is deploy.Build, a test's slow one; waiting, when set, is
 	// told a Compile waits on another's.
-	build   func(context.Context, []compiler.Repository, deploy.BuildOptions) (*compiler.Tree, error)
+	build   func(context.Context, []tree.Repository, deploy.BuildOptions) (*tree.Tree, error)
 	waiting func()
 }
 
@@ -73,7 +75,7 @@ type Compiler struct {
 // wait on.
 type flight struct {
 	done chan struct{}
-	tree *compiler.Tree
+	tree *tree.Tree
 	err  error
 }
 
@@ -89,7 +91,7 @@ const memoSize = 8
 
 type memoEntry struct {
 	key  string
-	tree *compiler.Tree
+	tree *tree.Tree
 }
 
 // Compile compiles the tree r holds: the catalogs of its
@@ -97,15 +99,15 @@ type memoEntry struct {
 // catalogs.yaml, projects/), compiled together, with the graph of those
 // that compile (deploy.Build, its values checked against the charts of
 // Charts when set: a warning when one cannot be fetched, the values left
-// unchecked). A tree that does not load is a *compiler.LoadError, a
+// unchecked). A tree that does not load is a *tree.LoadError, a
 // catalogs.yaml whose menu names a service of no catalog too; a catalog
 // that cannot be read, another error. An instance refused is the tree's
-// answer, not an error (compiler.TreeInstance.Err,
-// compiler.Tree.Problems). The same sources and catalog revisions give
+// answer, not an error (tree.Instance.Err,
+// tree.Tree.Problems). The same sources and catalog revisions give
 // the tree compiled last; compiles of them at once, one compile, which
 // they share. The compile runs on a copy of the tree, no lock of the
 // store held.
-func (c *Compiler) Compile(ctx context.Context, r treeedit.Reader) (*compiler.Tree, error) {
+func (c *Compiler) Compile(ctx context.Context, r treeedit.Reader) (*tree.Tree, error) {
 	cats, err := c.OpenCatalogs(ctx, r)
 	if err != nil {
 		return nil, err
@@ -114,12 +116,12 @@ func (c *Compiler) Compile(ctx context.Context, r treeedit.Reader) (*compiler.Tr
 		repos, _ := treeedit.ReadCatalogRepositories(r) // read by OpenCatalogs already
 		c.OnCatalogs(repos, cats.List())
 	}
-	tree, err := treeedit.ReadSources(r)
+	sources, err := treeedit.ReadSources(r)
 	if err != nil {
 		return nil, err
 	}
-	repos := append([]compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, catalogRepositories(cats)...)
-	key := memoKey(tree, cats)
+	repos := append([]tree.Repository{{Name: ".", FS: sources, Role: tree.RoleTree}}, catalogRepositories(cats)...)
+	key := memoKey(sources, cats)
 	if key == "" {
 		t, _, err := c.buildTree(ctx, repos)
 		return t, err
@@ -159,7 +161,7 @@ func (c *Compiler) Compile(ctx context.Context, r treeedit.Reader) (*compiler.Tr
 
 // fly runs the compile of flight f, whose inputs key, repos are: kept
 // when it compiled, its waiters told even when it panics.
-func (c *Compiler) fly(ctx context.Context, key string, f *flight, repos []compiler.Repository) {
+func (c *Compiler) fly(ctx context.Context, key string, f *flight, repos []tree.Repository) {
 	var unchecked bool
 	defer func() {
 		c.mu.Lock()
@@ -181,7 +183,7 @@ func (c *Compiler) fly(ctx context.Context, key string, f *flight, repos []compi
 // buildTree is deploy.Build of the repositories of a compile. unchecked
 // says that a chart could not be fetched: the instances that name it
 // compiled without the checks against it.
-func (c *Compiler) buildTree(ctx context.Context, repos []compiler.Repository) (t *compiler.Tree, unchecked bool, err error) {
+func (c *Compiler) buildTree(ctx context.Context, repos []tree.Repository) (t *tree.Tree, unchecked bool, err error) {
 	build := c.build
 	if build == nil {
 		build = deploy.Build
@@ -247,7 +249,7 @@ func (c *Compiler) CheckCatalogs(ctx context.Context, doc map[string]any) error 
 			return err
 		}
 	}
-	cat, err := compiler.LoadCatalog(catalogRepositories(cats))
+	cat, err := tree.LoadCatalog(catalogRepositories(cats))
 	if err != nil {
 		return &treeedit.CompileError{Err: err}
 	}
@@ -258,11 +260,11 @@ func (c *Compiler) CheckCatalogs(ctx context.Context, doc map[string]any) error 
 }
 
 // catalogRepositories are the catalogs read, each a repository of the
-// compile of role compiler.RoleCatalog.
-func catalogRepositories(cats *catalog.Catalogs) []compiler.Repository {
-	var repos []compiler.Repository
+// compile of role tree.RoleCatalog.
+func catalogRepositories(cats *catalog.Catalogs) []tree.Repository {
+	var repos []tree.Repository
 	for _, cat := range cats.List() {
-		repos = append(repos, compiler.Repository{Name: cat.Name, FS: cat.FS, Role: compiler.RoleCatalog})
+		repos = append(repos, tree.Repository{Name: cat.Name, FS: cat.FS, Role: tree.RoleCatalog})
 	}
 	return repos
 }
@@ -281,7 +283,7 @@ const (
 // memoKey identifies the inputs of a compile: the files of the tree and
 // the revision of each catalog; "" when a catalog has none (a local
 // directory, which may change under the same key).
-func memoKey(tree mapfs.FS, cats *catalog.Catalogs) string {
+func memoKey(sources mapfs.FS, cats *catalog.Catalogs) string {
 	h := sha256.New()
 	for _, cat := range cats.List() {
 		if cat.Revision == "" {
@@ -289,20 +291,20 @@ func memoKey(tree mapfs.FS, cats *catalog.Catalogs) string {
 		}
 		_, _ = fmt.Fprintf(h, "catalog %q %s\n", cat.Name, cat.Revision)
 	}
-	paths := make([]string, 0, len(tree))
-	for p := range tree {
+	paths := make([]string, 0, len(sources))
+	for p := range sources {
 		paths = append(paths, p)
 	}
 	slices.Sort(paths)
 	for _, p := range paths {
-		_, _ = fmt.Fprintf(h, "file %q %d\n", p, len(tree[p].Data))
-		h.Write(tree[p].Data)
+		_, _ = fmt.Fprintf(h, "file %q %d\n", p, len(sources[p].Data))
+		h.Write(sources[p].Data)
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // recall is the tree compiled of key, nil when none is kept; c.mu held.
-func (c *Compiler) recall(key string) *compiler.Tree {
+func (c *Compiler) recall(key string) *tree.Tree {
 	for _, m := range c.memo {
 		if m.key == key {
 			return m.tree
@@ -312,8 +314,8 @@ func (c *Compiler) recall(key string) *compiler.Tree {
 }
 
 // remember keeps the tree compiled of key; c.mu held.
-func (c *Compiler) remember(key string, tree *compiler.Tree) {
-	c.memo = append(c.memo, memoEntry{key: key, tree: tree})
+func (c *Compiler) remember(key string, t *tree.Tree) {
+	c.memo = append(c.memo, memoEntry{key: key, tree: t})
 	if len(c.memo) > memoSize {
 		c.memo = c.memo[len(c.memo)-memoSize:]
 	}

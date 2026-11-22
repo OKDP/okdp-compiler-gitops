@@ -1,6 +1,8 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"fmt"
 	"sort"
 	"strings"
@@ -9,7 +11,7 @@ import (
 )
 
 // The keys of the entries this package edits: connections of
-// compiler.PlatformFile and of a project's project.yaml, claims of a
+// tree.PlatformFile and of a project's project.yaml, claims of a
 // project's project.yaml.
 const (
 	connectionsKey = "connections"
@@ -17,10 +19,10 @@ const (
 )
 
 // ConnectionsFile is the file of the connections of a project,
-// compiler.PlatformFile for the platform's ("").
+// tree.PlatformFile for the platform's ("").
 func ConnectionsFile(project string) string {
 	if project == "" {
-		return compiler.PlatformFile
+		return tree.PlatformFile
 	}
 	return ProjectFilePath(project)
 }

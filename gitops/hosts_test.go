@@ -1,10 +1,11 @@
 package gitops
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"testing"
 	"testing/fstest"
 
-	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-gitops/catalog"
 	"github.com/okdp/okdp-gitops/deploy"
 )
@@ -28,7 +29,7 @@ spec:
 {{- end }}
 `)},
 	}
-	tree := func(config string) fstest.MapFS {
+	src := func(config string) fstest.MapFS {
 		return fstest.MapFS{
 			"platform.yaml":                             {Data: []byte("global:\n  okdp:\n    ingress: {suffix: okdp.sandbox}\n")},
 			"catalog/app/1.0.0/Chart.yaml":              {Data: []byte("apiVersion: v2\nname: app\nversion: 1.0.0\ndependencies:\n  - {name: app, repository: https://charts.example.org, version: 1.0.0}\n")},
@@ -54,7 +55,7 @@ spec:
 				c := NewCompiler(&catalog.Loader{})
 				c.Charts = deploy.StaticCharts(charts)
 				c.SkipRender = skip
-				got, _, err := c.buildTree(t.Context(), []compiler.Repository{{Name: ".", FS: tree(tc.config), Role: compiler.RoleTree}})
+				got, _, err := c.buildTree(t.Context(), []tree.Repository{{Name: ".", FS: src(tc.config), Role: tree.RoleTree}})
 				if err != nil {
 					t.Fatal(err)
 				}

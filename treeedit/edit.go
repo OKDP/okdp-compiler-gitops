@@ -1,12 +1,12 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"errors"
 	"fmt"
 	"github.com/okdp/okdp-gitops/deploy"
 	"strings"
-
-	compiler "github.com/okdp/okdp-compiler"
 )
 
 // Edit: an edit of a tree, an instance, a connection, a claim, a project
@@ -80,10 +80,10 @@ func (c *Change) Write(w Writer) error {
 // compiled before the change is written and after, Check.Verify the
 // verdict; the warnings of the instances it writes. compile is the
 // compile of the tree a Reader holds (deploy.Build of its parts and of
-// its catalogs, a *compiler.LoadError when it does not load); nil, the
+// its catalogs, a *tree.LoadError when it does not load); nil, the
 // change is not checked. On an error, w holds the change or part of it:
 // the caller drops it (a transaction that fails commits nothing).
-func Apply(w Writer, e Edit, compile func(Reader) (*compiler.Tree, error)) (*Change, []Warning, error) {
+func Apply(w Writer, e Edit, compile func(Reader) (*tree.Tree, error)) (*Change, []Warning, error) {
 	change, err := e.Change(w)
 	if err != nil {
 		return nil, nil, err
@@ -112,25 +112,25 @@ func Apply(w Writer, e Edit, compile func(Reader) (*compiler.Tree, error)) (*Cha
 // State: the compile of a tree as Check.Verify reads it, its Tree, or
 // why it does not load (Load); the zero State: none, unknown.
 type State struct {
-	Tree *compiler.Tree
-	Load *compiler.LoadError
+	Tree *tree.Tree
+	Load *tree.LoadError
 }
 
 // StateOf is the State of a compile, deploy.Build's tree and error: a
-// *compiler.LoadError is the State's, so is why the projects of the tree
-// that do not load do not (compiler.LoadErrorOf), any other error is
+// *tree.LoadError is the State's, so is why the projects of the tree
+// that do not load do not (tree.LoadErrorOf), any other error is
 // returned.
-func StateOf(tree *compiler.Tree, err error) (State, error) {
+func StateOf(t *tree.Tree, err error) (State, error) {
 	if err != nil {
-		if load, ok := errors.AsType[*compiler.LoadError](err); ok {
+		if load, ok := errors.AsType[*tree.LoadError](err); ok {
 			return State{Load: load}, nil
 		}
 		return State{}, err
 	}
 	// A project that does not load is a problem of the tree for a check:
 	// a change may not add one, though the tree compiles without it.
-	s := State{Tree: tree}
-	if load := compiler.LoadErrorOf(tree); load != nil {
+	s := State{Tree: t}
+	if load := tree.LoadErrorOf(t); load != nil {
 		s = State{Load: load}
 	}
 	return s, nil
@@ -173,7 +173,7 @@ type Warning struct {
 func (c *Check) Verify(before, after State) ([]Warning, error) {
 	strict := len(c.Subjects) > 0
 	if after.Load != nil {
-		added := compiler.AddedProblems(before.Load, after.Load)
+		added := tree.AddedProblems(before.Load, after.Load)
 		if len(added) == 0 && !strict {
 			return nil, nil
 		}
@@ -186,10 +186,10 @@ func (c *Check) Verify(before, after State) ([]Warning, error) {
 		}
 		return nil, ce
 	}
-	tree := after.Tree
+	t := after.Tree
 	var warnings []Warning
 	for _, s := range c.Subjects {
-		ti := tree.Instance(s.Project, s.Name)
+		ti := t.Instance(s.Project, s.Name)
 		if ti == nil {
 			continue
 		}
@@ -204,7 +204,7 @@ func (c *Check) Verify(before, after State) ([]Warning, error) {
 	}
 	if before.Tree != nil {
 		var users []string
-		for _, ti := range compiler.Regressions(before.Tree, tree) {
+		for _, ti := range tree.Regressions(before.Tree, t) {
 			if c.Removed == "" {
 				return warnings, &CompileError{Project: ti.Namespace(), Instance: ti.Name, Err: ti.Err()}
 			}
@@ -220,7 +220,7 @@ func (c *Check) Verify(before, after State) ([]Warning, error) {
 	}
 	if c.Created {
 		for _, s := range c.Subjects {
-			if other := deploy.ReleaseTaken(tree, s.Project, s.Name); other != nil {
+			if other := deploy.ReleaseTaken(t, s.Project, s.Name); other != nil {
 				return warnings, &ErrReleaseTaken{Release: other.Release(), Project: other.Namespace(), Instance: other.Name}
 			}
 		}

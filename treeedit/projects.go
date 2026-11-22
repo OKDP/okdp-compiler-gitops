@@ -1,6 +1,8 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"bytes"
 	"context"
 	"errors"
@@ -17,7 +19,7 @@ import (
 // a namespace. A project exists when that file does, whoever wrote it: a
 // console and a person editing the files declare projects the same way.
 // Its description is the key description of project.yaml
-// (compiler.ProjectDescription), which the compiler leaves out of the
+// (tree.ProjectDescription), which the compiler leaves out of the
 // context of the project's instances.
 type Project struct {
 	Name        string
@@ -52,7 +54,7 @@ func ReadProject(r Reader, name string) (*Project, error) {
 // project.yaml cannot be read (Project.ReadErr).
 func ListProjects(r Reader, split bool) ([]Project, error) {
 	out := []Project{}
-	names, err := r.ReadDir(compiler.ProjectsDir)
+	names, err := r.ReadDir(tree.ProjectsDir)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +84,7 @@ func ListProjects(r Reader, split bool) ([]Project, error) {
 // its repository) checks it first. set is the rule set the tree compiles
 // with; nil, the standard one.
 func CheckProjectName(set *compiler.RuleSet, r Reader, name string) error {
-	platform, _, err := readValues(r, compiler.PlatformFile)
+	platform, _, err := readValues(r, tree.PlatformFile)
 	if err != nil {
 		return err
 	}

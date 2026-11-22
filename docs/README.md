@@ -11,6 +11,6 @@
 | [The policy](specs/05_rules.md) | platform engineers, contributors (reference) | the rule sets okdp-gitops gives its compiles, okdp-compiler's and the security set, who applies them, the render of the upstream charts |
 | [Architecture](00_architecture.md) | contributors | the position in OKDP, the source map, a compile, the stores, the design decisions, the tests, the limitations |
 
-The packages, the mapping language, how the instances compile, their
-claims and the deployment graph are okdp-compiler's:
+The packages, the mapping language, how the instances compile and their
+claims are okdp-compiler's:
 [its documentation](https://github.com/OKDP/okdp-compiler/blob/main/docs/README.md).

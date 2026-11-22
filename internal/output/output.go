@@ -1,6 +1,6 @@
 // Package output: the output of a compiled tree for its deployers, the
 // files of one or more targets, the projects that do not deploy kept as
-// a previous output holds them (compiler.Partial), their platform's part of
+// a previous output holds them (tree.Partial), their platform's part of
 // today's settings, those of a release name two namespaces share too,
 // every release of the output in one namespace for the targets whose
 // objects share one; the release an instance would take of another's. A
@@ -8,6 +8,8 @@
 package output
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"errors"
 	"fmt"
@@ -24,7 +26,7 @@ import (
 )
 
 // Files: the output of t, path -> content: the files each of targets
-// writes for the projects compiler.Partial writes, merged, a path two
+// writes for the projects tree.Partial writes, merged, a path two
 // targets write differently an error; an instance a target cannot write
 // (target.InstanceChecker: its values over the 1 MiB of a Flux ConfigMap)
 // is refused as one that does not compile: its project kept, the others
@@ -32,7 +34,7 @@ import (
 // previous, the output written before (nil: none), holds under its
 // target.ProjectDir, its instances' as they are, but its platform's part,
 // which each target that is a target.Keeper writes of today's settings
-// (rederive, compiler.KeptProject.Rederived): its manifests (its Namespace, its
+// (rederive, tree.Kept.Rederived): its manifests (its Namespace, its
 // identity, the roles of its groups, the control plane's) and its
 // instances' identity (a Flux HelmRelease's ServiceAccount), so that a
 // privilege revoked, a role taken back, a policy tightened, do not
@@ -43,7 +45,7 @@ import (
 // an Argo CD target, whose objects share one namespace, a release name
 // two namespaces of t share (a-b/c and a/b-c), compiled or not, keeps
 // each instance of it that compiled, its error wrapping a
-// *target.ReleaseError (compiler.Partial), and so their projects, the
+// *target.ReleaseError (tree.Partial), and so their projects, the
 // rest of t written; then every release of the projects written and of
 // the kept projects' output in previous is in one namespace, else an
 // error wrapping a *target.ReleaseError per release: two releases of one
@@ -55,14 +57,14 @@ import (
 // the projects kept, and why.
 // charts holds the upstream charts the withdrawal of a refused instance
 // renders (withdraw), nil for none.
-func Files(t *compiler.Tree, targets []target.Target, previous, charts fs.FS) (map[string][]byte, []compiler.KeptProject, error) {
+func Files(t *tree.Tree, targets []target.Target, previous, charts fs.FS) (map[string][]byte, []tree.Kept, error) {
 	var shared []string // the objects named after the releases, of each target that has them
 	for _, tg := range targets {
 		if objects := releaseObjects(tg); objects != "" && !slices.Contains(shared, objects) {
 			shared = append(shared, objects)
 		}
 	}
-	also := map[*compiler.TreeInstance]error{}
+	also := map[*tree.Instance]error{}
 	if len(shared) > 0 {
 		also = taken(t, strings.Join(shared, " and "))
 	}
@@ -80,7 +82,7 @@ func Files(t *compiler.Tree, targets []target.Target, previous, charts fs.FS) (m
 			}
 		}
 	}
-	results, g, kept := compiler.Partial(t, also)
+	results, g, kept := tree.Partial(t, also)
 	if g == nil {
 		return nil, nil, errors.New("the deployment graph has a problem at no instance of the tree")
 	}
@@ -172,7 +174,7 @@ func Files(t *compiler.Tree, targets []target.Target, previous, charts fs.FS) (m
 // and nothing of it is kept, nor re-derived (compiler.CheckProject, the
 // compile's own view). And the paths written of today's settings, in
 // path order.
-func rederive(t *compiler.Tree, targets []target.Target, namespace string, previous map[string][]byte) (files map[string][]byte, rederived []string, dropped, err error) {
+func rederive(t *tree.Tree, targets []target.Target, namespace string, previous map[string][]byte) (files map[string][]byte, rederived []string, dropped, err error) {
 	inputs, unloaded, own, ok := projectInputs(t, namespace)
 	if !ok || len(previous) == 0 {
 		return previous, nil, nil, nil
@@ -237,9 +239,9 @@ func rederive(t *compiler.Tree, targets []target.Target, namespace string, previ
 
 // projectInputs: the inputs the project namespace of t is read from, those
 // of its first instance, else its own context when it does not load
-// (compiler.RefusedProject, unloaded, own when its project.yaml read); none for a
+// (tree.Refused, unloaded, own when its project.yaml read); none for a
 // project of t that has neither.
-func projectInputs(t *compiler.Tree, namespace string) (in compiler.Inputs, unloaded, own, ok bool) {
+func projectInputs(t *tree.Tree, namespace string) (in compiler.Inputs, unloaded, own, ok bool) {
 	for _, ti := range t.Instances {
 		if ti.Namespace() == namespace {
 			return ti.Inputs, false, true, true
@@ -268,14 +270,14 @@ func releaseObjects(tg target.Target) string {
 // taken: each instance of t that compiled whose release name an instance
 // of another namespace of t has too, compiled or not, and why, a
 // *target.ReleaseError, objects needing distinct names.
-func taken(t *compiler.Tree, objects string) map[*compiler.TreeInstance]error {
+func taken(t *tree.Tree, objects string) map[*tree.Instance]error {
 	namespaces := map[string][]string{}
 	for _, ti := range t.Instances {
 		if ns := namespaces[ti.Release()]; !slices.Contains(ns, ti.Namespace()) {
 			namespaces[ti.Release()] = append(ns, ti.Namespace())
 		}
 	}
-	also := map[*compiler.TreeInstance]error{}
+	also := map[*tree.Instance]error{}
 	for _, ti := range t.Instances {
 		ns := namespaces[ti.Release()]
 		if len(ns) < 2 || ti.Outcome.Err != nil {
@@ -336,7 +338,7 @@ func instanceOf(namespace, p string) (string, bool) {
 // the release names of the compiled instances, as target.Releases finds
 // them in two namespaces (a-b/c and a/b-c are both a-b-c), which the Flux
 // and Argo CD targets refuse.
-func ReleaseTaken(t *compiler.Tree, namespace, name string) *compiler.TreeInstance {
+func ReleaseTaken(t *tree.Tree, namespace, name string) *tree.Instance {
 	ti := t.Instance(namespace, name)
 	if ti == nil {
 		return nil

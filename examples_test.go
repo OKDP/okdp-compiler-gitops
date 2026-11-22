@@ -1,6 +1,8 @@
 package examples_test
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"bytes"
 	"context"
 	"errors"
@@ -34,11 +36,11 @@ var update = flag.Bool("update", false, "rewrite the examples' outputs from the 
 const examples = "examples"
 
 // load: every instance of an example's tree, its input/db/ one
-// repository (compiler.LoadRepository).
+// repository (tree.Load).
 func load(t *testing.T, example string) []compiler.Instance {
 	t.Helper()
 	db := filepath.Join(examples, example, "input", "db")
-	instances, err := compiler.LoadRepository(context.Background(), []compiler.Repository{{Name: db, FS: os.DirFS(db), Role: compiler.RoleTree}}, rules.Standard())
+	instances, err := tree.Load(context.Background(), []tree.Repository{{Name: db, FS: os.DirFS(db), Role: tree.RoleTree}}, rules.Standard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +80,7 @@ func readLayers(t *testing.T, files []string) []map[string]any {
 }
 
 // TestExample compiles the instances of each example's tree together
-// (load, compiler.CompileAll), checks their graph (compiler.NewGraph) and compares what the
+// (load, compiler.CompileAll), checks their graph (tree.NewGraph) and compares what the
 // helm target writes with its output/, byte for byte; a file of output/
 // that it does not write fails. 00_passthrough: Chart.yaml and a plain
 // values.yaml, no instance values. 01_minimal: one chart, no contract.
@@ -128,7 +130,7 @@ func compileTree(t *testing.T, instances []compiler.Instance) (map[string][]byte
 		results = append(results, o.Result)
 		warnings = append(warnings, o.Result.Warnings...)
 	}
-	g, err := compiler.NewGraph(results)
+	g, err := tree.NewGraph(results)
 	if err != nil {
 		t.Fatal(err)
 	}

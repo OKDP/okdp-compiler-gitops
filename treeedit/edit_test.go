@@ -1,6 +1,8 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"bytes"
 	"context"
 	"errors"
@@ -110,41 +112,41 @@ func (m memTree) set(files map[string]string) {
 // applies them: on a copy, kept when the edit passes its check, a commit
 // each that changes something, named after the edit.
 type store struct {
-	tree    memTree
+	src     memTree
 	commits []string
 }
 
 // newStore holds the test tree.
 func newStore(t *testing.T) *store {
 	t.Helper()
-	tree := memTree{}
+	src := memTree{}
 	err := filepath.WalkDir(treeFixture, func(p string, e fs.DirEntry, err error) error {
 		if err != nil || e.IsDir() {
 			return err
 		}
 		data, err := os.ReadFile(p)
 		rel, _ := filepath.Rel(treeFixture, p)
-		tree[filepath.ToSlash(rel)] = data
+		src[filepath.ToSlash(rel)] = data
 		return err
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &store{tree: tree}
+	return &store{src: src}
 }
 
 // compile compiles the tree r holds, its platform.yaml and projects/,
 // with the test catalog.
-func compile(r Reader) (*compiler.Tree, error) {
-	tree := fstest.MapFS{}
+func compile(r Reader) (*tree.Tree, error) {
+	src := fstest.MapFS{}
 	for p, data := range r.(memTree) {
-		if p == compiler.PlatformFile || strings.HasPrefix(p, compiler.ProjectsDir+"/") {
-			tree[p] = &fstest.MapFile{Data: data}
+		if p == tree.PlatformFile || strings.HasPrefix(p, tree.ProjectsDir+"/") {
+			src[p] = &fstest.MapFile{Data: data}
 		}
 	}
-	return deploy.Build(context.Background(), []compiler.Repository{
-		{Name: ".", FS: tree, Role: compiler.RoleTree},
-		{Name: "test-charts", FS: os.DirFS(catalogFixture), Role: compiler.RoleCatalog},
+	return deploy.Build(context.Background(), []tree.Repository{
+		{Name: ".", FS: src, Role: tree.RoleTree},
+		{Name: "test-charts", FS: os.DirFS(catalogFixture), Role: tree.RoleCatalog},
 	}, deploy.BuildOptions{})
 }
 
@@ -153,13 +155,13 @@ func (s *store) apply(e Edit, err error) (*Change, error) {
 	if err != nil {
 		return nil, err
 	}
-	working := maps.Clone(s.tree)
+	working := maps.Clone(s.src)
 	change, _, err := Apply(working, e, compile)
 	if err != nil {
 		return nil, err
 	}
-	if !maps.EqualFunc(working, s.tree, bytes.Equal) {
-		s.tree = working
+	if !maps.EqualFunc(working, s.src, bytes.Equal) {
+		s.src = working
 		s.commits = append(s.commits, e.Action+" "+e.Target)
 	}
 	return change, nil
@@ -176,10 +178,10 @@ func TestInstanceLifecycle(t *testing.T) {
 	if _, err := s.apply(CreateInstance(web)); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.tree.files()["projects/demo/instances/web/instance.yaml"]; got != "service: app\nversion: 1.0.0\n" {
+	if got := s.src.files()["projects/demo/instances/web/instance.yaml"]; got != "service: app\nversion: 1.0.0\n" {
 		t.Errorf("instance.yaml = %q", got)
 	}
-	if got := s.tree.files()["projects/demo/instances/web/config.yaml"]; got != "database: analytics\n" {
+	if got := s.src.files()["projects/demo/instances/web/config.yaml"]; got != "database: analytics\n" {
 		t.Errorf("config.yaml = %q", got)
 	}
 	if s.last() != "deploy demo/web" {
@@ -189,17 +191,17 @@ func TestInstanceLifecycle(t *testing.T) {
 		t.Fatalf("second create: %v", err)
 	}
 
-	got, err := ReadInstance(s.tree, "demo", "web")
+	got, err := ReadInstance(s.src, "demo", "web")
 	if err != nil || got.Service != "app" || got.Values["database"] != "analytics" || got.Release() != "demo-web" {
 		t.Fatalf("get: %+v %v", got, err)
 	}
-	list, err := ListInstances(s.tree, "demo")
+	list, err := ListInstances(s.src, "demo")
 	if err != nil || len(list) != 4 || list[3].Name != "web" {
 		t.Fatalf("list: %+v %v", list, err)
 	}
 
 	// A hand-written comment survives an edit that leaves the file alone.
-	s.tree.set(map[string]string{"projects/demo/instances/web/config.yaml": "# the shared database\ndatabase: analytics\n"})
+	s.src.set(map[string]string{"projects/demo/instances/web/config.yaml": "# the shared database\ndatabase: analytics\n"})
 	commits := len(s.commits)
 	change, err := s.apply(UpdateInstance("demo", "web", func(*Instance) error { return nil }))
 	if err != nil {
@@ -215,7 +217,7 @@ func TestInstanceLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.tree.files()["projects/demo/instances/web/config.yaml"]; got != "database:\n  class: large\n" {
+	if got := s.src.files()["projects/demo/instances/web/config.yaml"]; got != "database:\n  class: large\n" {
 		t.Errorf("config.yaml = %q", got)
 	}
 	if s.last() != "update demo/web" || change.Instance.Project != "demo" || change.Instance.Values["database"] == nil {
@@ -225,7 +227,7 @@ func TestInstanceLifecycle(t *testing.T) {
 	if _, err := s.apply(DeleteInstance("demo", "web")); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := s.tree.files()["projects/demo/instances/web/instance.yaml"]; ok {
+	if _, ok := s.src.files()["projects/demo/instances/web/instance.yaml"]; ok {
 		t.Error("the instance survived its delete")
 	}
 	if s.last() != "delete demo/web" {
@@ -240,7 +242,7 @@ func TestInstanceLifecycle(t *testing.T) {
 // instance written, or another that compiled before.
 func TestAnEditThatDoesNotCompileIsRefused(t *testing.T) {
 	s := newStore(t)
-	before := s.tree.files()
+	before := s.src.files()
 
 	_, err := s.apply(CreateInstance(Instance{Project: "demo", Name: "web", Service: "app", Version: "1.0.0", Values: map[string]any{"database": "nowhere"}}))
 	var ce *CompileError
@@ -248,7 +250,7 @@ func TestAnEditThatDoesNotCompileIsRefused(t *testing.T) {
 		t.Fatalf("an unknown connection: %v", err)
 	}
 	_, err = s.apply(CreateInstance(Instance{Project: "demo", Name: "web", Service: "app", Version: "9.9.9"}))
-	var layout *compiler.LoadError
+	var layout *tree.LoadError
 	if !errors.As(err, &ce) || !errors.As(err, &layout) || !strings.Contains(err.Error(), `version "9.9.9" of service "app"`) {
 		t.Fatalf("an unknown version: %v", err)
 	}
@@ -264,7 +266,7 @@ func TestAnEditThatDoesNotCompileIsRefused(t *testing.T) {
 	if _, err := CreateInstance(Instance{Project: "demo", Name: "web"}); err == nil {
 		t.Fatal("an instance of no package")
 	}
-	if !maps.Equal(before, s.tree.files()) || len(s.commits) != 0 {
+	if !maps.Equal(before, s.src.files()) || len(s.commits) != 0 {
 		t.Error("a refused edit changed the tree")
 	}
 }
@@ -273,7 +275,7 @@ func TestAnEditThatDoesNotCompileIsRefused(t *testing.T) {
 // and an edit of an instance whatever the problems.
 func TestAnEditOfATreeThatDoesNotLoad(t *testing.T) {
 	s := newStore(t)
-	s.tree.set(map[string]string{"projects/demo/instances/broken/instance.yaml": "service: app\nversion: 9.9.9\n"})
+	s.src.set(map[string]string{"projects/demo/instances/broken/instance.yaml": "service: app\nversion: 9.9.9\n"})
 	lake := compiler.Connection{Name: "lake", Contract: "database-server", Values: map[string]any{"host": "lake", "dbName": "lake"}, SecretRef: "lake"}
 	if _, err := s.apply(PutConnection("demo", lake, true)); err != nil {
 		t.Fatalf("an edit that adds no problem: %v", err)
@@ -283,7 +285,7 @@ func TestAnEditOfATreeThatDoesNotLoad(t *testing.T) {
 	if !errors.As(err, &ce) || ce.Instance != "app" || !strings.Contains(err.Error(), `version "9.9.9"`) {
 		t.Fatalf("an instance written: %v", err)
 	}
-	s.tree.set(map[string]string{"platform.yaml": "global: [\n"})
+	s.src.set(map[string]string{"platform.yaml": "global: [\n"})
 	if _, err := s.apply(PutConnection("demo", compiler.Connection{Name: "lake2", Contract: "database-server"}, true)); err != nil {
 		t.Fatalf("a tree that did not load: %v", err)
 	}
@@ -324,7 +326,7 @@ func TestARemovalRefusesWhatIsInUse(t *testing.T) {
 // platform.yaml for the platform's; the rest of the file is kept.
 func TestConnectionsAreEntriesOfTheirFile(t *testing.T) {
 	s := newStore(t)
-	ext, err := ReadConnection(s.tree, "demo", "ext-db")
+	ext, err := ReadConnection(s.src, "demo", "ext-db")
 	if err != nil || ext.Contract != "database-server" || ext.Description != "A database outside the platform" || ext.SecretRef != "ext-db-credentials" || ext.Values["host"] != "db.example.org" {
 		t.Fatalf("ext-db: %+v %v", ext, err)
 	}
@@ -335,13 +337,13 @@ func TestConnectionsAreEntriesOfTheirFile(t *testing.T) {
 	if _, err := s.apply(PutConnection("demo", lake, true)); !errors.Is(err, ErrExists) {
 		t.Fatalf("second create: %v", err)
 	}
-	project := s.tree.files()["projects/demo/project.yaml"]
+	project := s.src.files()["projects/demo/project.yaml"]
 	if !strings.HasPrefix(project, "description: The demo project\nconnections:\n") ||
 		!strings.Contains(project, "  lake:\n    contract: database-server\n    secretRef:\n      remoteKey: demo/lake\n    dbName: lake\n    host: lake.example.org\n") ||
 		!strings.Contains(project, "claims:\n  analytics:\n") {
 		t.Errorf("project.yaml:\n%s", project)
 	}
-	list, err := ListConnections(s.tree, "demo")
+	list, err := ListConnections(s.src, "demo")
 	if err != nil || len(list) != 2 || list[1].Name != "lake" || list[1].RemoteKey != "demo/lake" {
 		t.Fatalf("list: %+v %v", list, err)
 	}
@@ -360,11 +362,11 @@ func TestConnectionsAreEntriesOfTheirFile(t *testing.T) {
 	if _, err := s.apply(PutConnection("", shared, true)); err != nil {
 		t.Fatal(err)
 	}
-	platform := s.tree.files()["platform.yaml"]
+	platform := s.src.files()["platform.yaml"]
 	if !strings.HasPrefix(platform, "# The platform values:") || !strings.Contains(platform, "connections:\n  shared:\n    contract: database-server\n    description: A shared database\n") {
 		t.Errorf("platform.yaml:\n%s", platform)
 	}
-	if got, err := ReadConnection(s.tree, "", "shared"); err != nil || got.Values["dbName"] != "shared" {
+	if got, err := ReadConnection(s.src, "", "shared"); err != nil || got.Values["dbName"] != "shared" {
 		t.Fatalf("the platform's: %+v %v", got, err)
 	}
 	if s.last() != "create connection platform/shared" {
@@ -378,7 +380,7 @@ func TestConnectionsAreEntriesOfTheirFile(t *testing.T) {
 // The named claims are entries of claims of project.yaml.
 func TestNamedClaimsAreEntriesOfProjectYAML(t *testing.T) {
 	s := newStore(t)
-	claims, err := ListClaims(s.tree, "demo")
+	claims, err := ListClaims(s.src, "demo")
 	if err != nil || len(claims) != 1 || claims[0].Name != "analytics" || claims[0].Class != "large" {
 		t.Fatalf("claims: %+v %v", claims, err)
 	}
@@ -386,8 +388,8 @@ func TestNamedClaimsAreEntriesOfProjectYAML(t *testing.T) {
 	if _, err := s.apply(PutClaim("demo", vectors, true)); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(s.tree.files()["projects/demo/project.yaml"], "  vectors:\n    contract: database-server\n    request:\n      extensions:\n        - pgvector\n") {
-		t.Errorf("project.yaml:\n%s", s.tree.files()["projects/demo/project.yaml"])
+	if !strings.Contains(s.src.files()["projects/demo/project.yaml"], "  vectors:\n    contract: database-server\n    request:\n      extensions:\n        - pgvector\n") {
+		t.Errorf("project.yaml:\n%s", s.src.files()["projects/demo/project.yaml"])
 	}
 	if s.last() != "create claim demo/vectors" {
 		t.Errorf("commit = %q", s.last())
@@ -401,7 +403,7 @@ func TestNamedClaimsAreEntriesOfProjectYAML(t *testing.T) {
 	if _, err := s.apply(DeleteClaim("demo", "vectors")); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("second delete: %v", err)
 	}
-	if _, err := ListClaims(s.tree, ".."); !errors.Is(err, ErrNotFound) {
+	if _, err := ListClaims(s.src, ".."); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("the claims of no project: %v", err)
 	}
 }
@@ -432,14 +434,14 @@ func TestCreateRefusesACollidingReleaseName(t *testing.T) {
 // A project is its project.yaml, its description the key description.
 func TestProjectsAreTheirProjectFiles(t *testing.T) {
 	s := newStore(t)
-	projects, err := ListProjects(s.tree, false)
+	projects, err := ListProjects(s.src, false)
 	if err != nil || len(projects) != 2 || projects[0].Description != "The platform's databases" || projects[1].Description != "The demo project" {
 		t.Fatalf("projects: %+v %v", projects, err)
 	}
 	if _, err := s.apply(CreateProject(Project{Name: "lab", Description: "A  lab\nof data"}, false)); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.tree.files()["projects/lab/project.yaml"]; got != "description: A lab of data\n" {
+	if got := s.src.files()["projects/lab/project.yaml"]; got != "description: A lab of data\n" {
 		t.Errorf("project.yaml = %q", got)
 	}
 	if s.last() != "create project lab" {
@@ -451,20 +453,20 @@ func TestProjectsAreTheirProjectFiles(t *testing.T) {
 	if _, err := s.apply(UpdateProject(Project{Name: "demo", Description: "Demos"})); err != nil {
 		t.Fatal(err)
 	}
-	demo := s.tree.files()["projects/demo/project.yaml"]
+	demo := s.src.files()["projects/demo/project.yaml"]
 	if !strings.HasPrefix(demo, "description: Demos\nconnections:\n") || !strings.Contains(demo, "claims:\n") {
 		t.Errorf("project.yaml:\n%s", demo)
 	}
 	if _, err := s.apply(UpdateProject(Project{Name: "lab"})); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.tree.files()["projects/lab/project.yaml"]; got != "{}\n" {
+	if got := s.src.files()["projects/lab/project.yaml"]; got != "{}\n" {
 		t.Errorf("project.yaml = %q", got)
 	}
 	if _, err := s.apply(UpdateProject(Project{Name: "nowhere"})); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("an update of nothing: %v", err)
 	}
-	if p, err := ReadProject(s.tree, "nowhere"); !errors.Is(err, ErrNotFound) {
+	if p, err := ReadProject(s.src, "nowhere"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("get: %+v %v", p, err)
 	}
 	if _, err := s.apply(DeleteProject("lab", false)); err != nil {
@@ -481,17 +483,17 @@ func TestProjectsAreTheirProjectFiles(t *testing.T) {
 // repository.
 func TestTheProjectsOfASplitTreeAreListed(t *testing.T) {
 	s := newStore(t)
-	s.tree.set(map[string]string{ProjectsFile: "projects:\n  - name: demo\n  - name: data\n"})
+	s.src.set(map[string]string{ProjectsFile: "projects:\n  - name: demo\n  - name: data\n"})
 	if _, err := s.apply(CreateProject(Project{Name: "lab"}, true)); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.tree.files()[ProjectsFile]; got != "projects:\n  - name: data\n  - name: demo\n  - name: lab\n" {
+	if got := s.src.files()[ProjectsFile]; got != "projects:\n  - name: data\n  - name: demo\n  - name: lab\n" {
 		t.Errorf("%s:\n%s", ProjectsFile, got)
 	}
-	if err := CheckNewProject(s.tree, "lab"); !errors.Is(err, ErrExists) {
+	if err := CheckNewProject(s.src, "lab"); !errors.Is(err, ErrExists) {
 		t.Fatalf("a project listed: %v", err)
 	}
-	if err := CheckNewProject(s.tree, "other"); err != nil {
+	if err := CheckNewProject(s.src, "other"); err != nil {
 		t.Fatal(err)
 	}
 	change, err := s.apply(DeleteProject("lab", true))
@@ -501,17 +503,17 @@ func TestTheProjectsOfASplitTreeAreListed(t *testing.T) {
 	if len(change.Files) != 1 || change.Files[0].Path != ProjectsFile || change.Files[0].Remove {
 		t.Errorf("change: %+v", change.Files)
 	}
-	if got := s.tree.files()[ProjectsFile]; got != "projects:\n  - name: data\n  - name: demo\n" {
+	if got := s.src.files()[ProjectsFile]; got != "projects:\n  - name: data\n  - name: demo\n" {
 		t.Errorf("%s:\n%s", ProjectsFile, got)
 	}
 
 	// A project whose project.yaml cannot be read is listed all the same.
-	s.tree.set(map[string]string{"projects/data/project.yaml": ""})
-	projects, err := ListProjects(s.tree, true)
+	s.src.set(map[string]string{"projects/data/project.yaml": ""})
+	projects, err := ListProjects(s.src, true)
 	if err != nil || len(projects) != 3 || projects[0].Name != "data" || projects[0].ReadErr == nil || projects[1].ReadErr != nil {
 		t.Fatalf("projects: %+v %v", projects, err)
 	}
-	if projects, err := ListProjects(s.tree, false); err != nil || len(projects) != 2 || projects[0].Name != "demo" {
+	if projects, err := ListProjects(s.src, false); err != nil || len(projects) != 2 || projects[0].Name != "demo" {
 		t.Fatalf("an unsplit tree: %+v %v", projects, err)
 	}
 
@@ -527,20 +529,20 @@ func TestTheProjectsOfASplitTreeAreListed(t *testing.T) {
 // *CompileError, the compiler's message.
 func TestAProjectOfAReservedNameIsRefused(t *testing.T) {
 	s := newStore(t)
-	s.tree["platform.yaml"] = append(s.tree["platform.yaml"], "    policy:\n      reserved: [openbao]\n"...)
+	s.src["platform.yaml"] = append(s.src["platform.yaml"], "    policy:\n      reserved: [openbao]\n"...)
 	for name, want := range map[string]string{
 		"kube-foo": `project "kube-foo": the namespace is reserved: kube-* is Kubernetes' own (kube-system, kube-public, kube-node-lease)`,
 		"platform": `project "platform": the namespace is reserved: platform/ holds the platform's keys of the secret store, which no project writes`,
 		"argocd":   `project "argocd": the namespace is reserved: a deployer engine's, or the namespace its target writes in (argocd, flux-system, okdp-releases): a project's releases there would drive the engine`,
 		"openbao":  `project "openbao": the namespace is reserved by the platform (global.okdp.policy.reserved): no project has it`,
 	} {
-		err := CheckProjectName(nil, s.tree, name)
+		err := CheckProjectName(nil, s.src, name)
 		var compileErr *CompileError
 		if !errors.As(err, &compileErr) || compileErr.Project != name || err.Error() != want {
 			t.Errorf("%s: got %v, want %s", name, err, want)
 		}
 	}
-	if err := CheckProjectName(nil, s.tree, "lab"); err != nil {
+	if err := CheckProjectName(nil, s.src, "lab"); err != nil {
 		t.Fatal(err)
 	}
 	if err := CheckProjectName(nil, memTree{}, "lab"); err != nil {
@@ -558,18 +560,18 @@ func TestUpdateCatalogKeepsWhatItDoesNotTouch(t *testing.T) {
 	}), nil); err != nil {
 		t.Fatal(err)
 	}
-	got := s.tree.files()[CatalogsFile]
+	got := s.src.files()[CatalogsFile]
 	if !strings.HasPrefix(got, "# The catalog repositories") || !strings.Contains(got, "repositories:\n  - {name: test-charts") || !strings.Contains(got, "categories: []\n") {
 		t.Errorf("%s:\n%s", CatalogsFile, got)
 	}
 	if s.last() != "update catalog app" {
 		t.Errorf("commit = %q", s.last())
 	}
-	doc, err := ReadCatalog(s.tree)
+	doc, err := ReadCatalog(s.src)
 	if err != nil || doc["categories"] == nil {
 		t.Fatalf("catalog: %+v %v", doc, err)
 	}
-	repos, err := ReadCatalogRepositories(s.tree)
+	repos, err := ReadCatalogRepositories(s.src)
 	if err != nil || !slices.Equal(repos, []CatalogRepository{{Name: "test-charts", URL: "https://git.example.org/okdp/test-charts.git", Ref: "main"}}) {
 		t.Fatalf("repositories: %+v %v", repos, err)
 	}
@@ -582,16 +584,16 @@ func TestUpdateCatalogKeepsWhatItDoesNotTouch(t *testing.T) {
 	if _, err := ReadCatalogRepositories(memTree{CatalogsFile: []byte("repositories: x\n")}); err == nil || !strings.HasPrefix(err.Error(), CatalogsFile+": ") {
 		t.Fatalf("a list that is not one: %v", err)
 	}
-	if raw, err := ReadPlatformValues(s.tree); err != nil || !bytes.HasPrefix(raw, []byte("# The platform values:")) {
+	if raw, err := ReadPlatformValues(s.src); err != nil || !bytes.HasPrefix(raw, []byte("# The platform values:")) {
 		t.Fatalf("platform.yaml: %q %v", raw, err)
 	}
 	// A menu the compile would refuse is not written.
-	before := s.tree.files()[CatalogsFile]
+	before := s.src.files()[CatalogsFile]
 	_, err = s.apply(UpdateCatalog("app", func(doc map[string]any) error {
 		doc["categories"] = []any{map[string]any{"title": "Apps", "services": []any{map[string]any{"name": "app", "versions": []any{"1.0.0"}}}}}
 		return nil
 	}), nil)
-	if err == nil || !strings.Contains(err.Error(), "categories[0].services[0].versions: unknown key") || s.tree.files()[CatalogsFile] != before {
+	if err == nil || !strings.Contains(err.Error(), "categories[0].services[0].versions: unknown key") || s.src.files()[CatalogsFile] != before {
 		t.Fatalf("a menu refused: %v", err)
 	}
 }
@@ -599,11 +601,11 @@ func TestUpdateCatalogKeepsWhatItDoesNotTouch(t *testing.T) {
 // The menu of catalogs.yaml is checked against the catalogs: a service
 // of none, a default version the service does not have.
 func TestCheckCatalogs(t *testing.T) {
-	catalog, err := compiler.LoadCatalog([]compiler.Repository{{Name: "test-charts", FS: os.DirFS(catalogFixture), Role: compiler.RoleCatalog}})
+	catalog, err := tree.LoadCatalog([]tree.Repository{{Name: "test-charts", FS: os.DirFS(catalogFixture), Role: tree.RoleCatalog}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := ReadCatalog(newStore(t).tree)
+	doc, err := ReadCatalog(newStore(t).src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -654,8 +656,8 @@ func TestCatalogRepositories(t *testing.T) {
 // another directory, is not found, and changes nothing.
 func TestDotSegmentNamesAreNotFound(t *testing.T) {
 	s := newStore(t)
-	before := s.tree.files()
-	if _, err := ReadInstance(s.tree, "demo", ".."); !errors.Is(err, ErrNotFound) {
+	before := s.src.files()
+	if _, err := ReadInstance(s.src, "demo", ".."); !errors.Is(err, ErrNotFound) {
 		t.Errorf("get: %v", err)
 	}
 	if _, err := s.apply(DeleteInstance("demo", "..")); !errors.Is(err, ErrNotFound) {
@@ -667,7 +669,7 @@ func TestDotSegmentNamesAreNotFound(t *testing.T) {
 	if _, err := s.apply(DeleteConnection("..", "x")); !errors.Is(err, ErrNotFound) {
 		t.Errorf("delete connection: %v", err)
 	}
-	if _, err := ReadConnection(s.tree, "", ".."); !errors.Is(err, ErrNotFound) {
+	if _, err := ReadConnection(s.src, "", ".."); !errors.Is(err, ErrNotFound) {
 		t.Errorf("get connection: %v", err)
 	}
 	if _, err := s.apply(DeleteClaim("demo", ".")); !errors.Is(err, ErrNotFound) {
@@ -676,7 +678,7 @@ func TestDotSegmentNamesAreNotFound(t *testing.T) {
 	if _, err := s.apply(DeleteProject(".", false)); !errors.Is(err, ErrNotFound) {
 		t.Errorf("delete project: %v", err)
 	}
-	if !maps.Equal(before, s.tree.files()) {
+	if !maps.Equal(before, s.src.files()) {
 		t.Error("a dot segment changed the tree")
 	}
 }
@@ -695,13 +697,13 @@ func TestTheClaimersOfAnInstanceAreKeptAsWritten(t *testing.T) {
 		{"service: postgresql\nversion: 1.0.0\nclaimers: []\n", []string{}},
 		{"service: postgresql\nversion: 1.0.0\nclaimers:\n  - demo\n  - lab\n", []string{"demo", "lab"}},
 	} {
-		s.tree.set(map[string]string{file: c.written})
+		s.src.set(map[string]string{file: c.written})
 		same := func(got []string) bool { return (got == nil) == (c.claimers == nil) && slices.Equal(got, c.claimers) }
-		got, err := ReadInstance(s.tree, "data", "postgresql")
+		got, err := ReadInstance(s.src, "data", "postgresql")
 		if err != nil || !same(got.Claimers) {
 			t.Fatalf("%q: %#v %v", c.written, got, err)
 		}
-		list, err := ListInstances(s.tree, "data")
+		list, err := ListInstances(s.src, "data")
 		if err != nil || len(list) != 1 || !same(list[0].Claimers) {
 			t.Fatalf("%q: list %#v %v", c.written, list, err)
 		}
@@ -713,23 +715,23 @@ func TestTheClaimersOfAnInstanceAreKeptAsWritten(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := Apply(s.tree, e, nil); err != nil {
+		if _, _, err := Apply(s.src, e, nil); err != nil {
 			t.Fatal(err)
 		}
-		if want := strings.Replace(c.written, "1.0.0", "2.0.0", 1); s.tree.files()[file] != want {
-			t.Errorf("written again:\n%s\nwant:\n%s", s.tree.files()[file], want)
+		if want := strings.Replace(c.written, "1.0.0", "2.0.0", 1); s.src.files()[file] != want {
+			t.Errorf("written again:\n%s\nwant:\n%s", s.src.files()[file], want)
 		}
 	}
 
 	// Changed by the control plane: written.
-	s.tree.set(map[string]string{file: "service: postgresql\nversion: 1.0.0\n"})
+	s.src.set(map[string]string{file: "service: postgresql\nversion: 1.0.0\n"})
 	if _, err := s.apply(UpdateInstance("data", "postgresql", func(i *Instance) error {
 		i.Claimers = []string{"demo"}
 		return nil
 	})); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.tree.files()[file]; got != "service: postgresql\nversion: 1.0.0\nclaimers:\n  - demo\n" {
+	if got := s.src.files()[file]; got != "service: postgresql\nversion: 1.0.0\nclaimers:\n  - demo\n" {
 		t.Errorf("instance.yaml:\n%s", got)
 	}
 }
@@ -741,11 +743,11 @@ func TestTheOutputIsReadBack(t *testing.T) {
 	if _, err := ReadCompiled(fstest.MapFS{}, "demo", "app"); !errors.Is(err, ErrNotFound) || !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("compiled before the compile: %v", err)
 	}
-	tree, err := compile(s.tree)
+	src, err := compile(s.src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, _, err := deploy.TreeFiles(tree, []deploy.Target{deploy.Flux{}}, nil, nil)
+	files, _, err := deploy.TreeFiles(src, []deploy.Target{deploy.Flux{}}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -760,7 +762,7 @@ func TestTheOutputIsReadBack(t *testing.T) {
 	if _, err := ReadCompiled(output, "demo", ".."); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a dot segment: %v", err)
 	}
-	published, err := ListPublished(s.tree, output, "data")
+	published, err := ListPublished(s.src, output, "data")
 	if err != nil || len(published) != 1 {
 		t.Fatalf("published: %+v %v", published, err)
 	}
@@ -768,11 +770,11 @@ func TestTheOutputIsReadBack(t *testing.T) {
 		t.Errorf("data-postgresql: %+v", pg)
 	}
 	// An instance of the output the tree has not: not listed.
-	_ = s.tree.Remove("projects/data/instances/postgresql")
-	if published, err := ListPublished(s.tree, output, "data"); err != nil || len(published) != 0 {
+	_ = s.src.Remove("projects/data/instances/postgresql")
+	if published, err := ListPublished(s.src, output, "data"); err != nil || len(published) != 0 {
 		t.Fatalf("published: %+v %v", published, err)
 	}
-	if published, err := ListPublished(s.tree, output, ".."); err != nil || published != nil {
+	if published, err := ListPublished(s.src, output, ".."); err != nil || published != nil {
 		t.Fatalf("no project: %+v %v", published, err)
 	}
 }

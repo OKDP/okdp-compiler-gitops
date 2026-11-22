@@ -1,6 +1,8 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"bytes"
 	"errors"
 	"fmt"
@@ -10,30 +12,30 @@ import (
 
 // CatalogRepository is a catalog of CatalogsFile: a repository of
 // packages (catalog/<service>/<version>/, contracts/), a compile's
-// compiler.RoleCatalog, at a ref (a branch, a tag or a commit).
-type CatalogRepository = compiler.CatalogRepository
+// tree.RoleCatalog, at a ref (a branch, a tag or a commit).
+type CatalogRepository = tree.CatalogRepository
 
 // Catalogs is CatalogsFile, read (ParseCatalogs): its Repositories and
 // the console's menu, its Categories (MenuCategory: Title, Icon,
 // Services), each service a MenuService (Name, Description, Default,
 // Label, ExposesUI).
 type (
-	Catalogs     = compiler.Catalogs
-	MenuCategory = compiler.MenuCategory
-	MenuService  = compiler.MenuService
+	Catalogs     = tree.Catalogs
+	MenuCategory = tree.MenuCategory
+	MenuService  = tree.MenuService
 )
 
 // DefaultCatalogRef is the ref of a catalog that names none.
-const DefaultCatalogRef = compiler.DefaultCatalogRef
+const DefaultCatalogRef = tree.DefaultCatalogRef
 
 // ParseCatalogs reads CatalogsFile (doc, as decoded) strictly, as the
-// compile reads it (compiler.LoadRepository, a repository of the tree
+// compile reads it (tree.Load, a repository of the tree
 // that holds it): repositories, each a name and a url, the names unique,
 // a ref DefaultCatalogRef by default; categories, each a title, the
 // titles unique, its services, each a name, listed once; any other key,
 // at any level, or a value of another type, refused. Every problem at
 // once.
-func ParseCatalogs(doc map[string]any) (*Catalogs, error) { return compiler.ParseCatalogs(doc) }
+func ParseCatalogs(doc map[string]any) (*Catalogs, error) { return tree.ParseCatalogs(doc) }
 
 // CatalogRepositories reads the repositories of CatalogsFile (doc, as
 // decoded), the whole file checked (ParseCatalogs).
@@ -54,7 +56,7 @@ func CheckCatalogs(doc map[string]any, catalog *compiler.Catalog) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", CatalogsFile, err)
 	}
-	return catalog.CheckMenu(c)
+	return tree.CheckMenu(catalog, c)
 }
 
 // ReadCatalogRepositories reads the catalogs of the CatalogsFile r holds
@@ -117,6 +119,6 @@ func UpdateCatalog(target string, change func(catalog map[string]any) error) Edi
 	}}
 }
 
-// ReadPlatformValues returns compiler.PlatformFile as written, or an
+// ReadPlatformValues returns tree.PlatformFile as written, or an
 // error wrapping ErrNotFound without it.
-func ReadPlatformValues(r Reader) ([]byte, error) { return r.ReadFile(compiler.PlatformFile) }
+func ReadPlatformValues(r Reader) ([]byte, error) { return r.ReadFile(tree.PlatformFile) }

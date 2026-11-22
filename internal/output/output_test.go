@@ -1,6 +1,8 @@
 package output
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"errors"
 	"maps"
 	"slices"
@@ -18,11 +20,11 @@ import (
 
 // compiled: a tree of instances, each <namespace>/<name>, its release
 // <namespace>-<name>, compiled but those of refused.
-func compiled(names []string, refused ...string) *compiler.Tree {
-	t := &compiler.Tree{}
+func compiled(names []string, refused ...string) *tree.Tree {
+	t := &tree.Tree{}
 	for _, n := range names {
 		ns, name, _ := strings.Cut(n, "/")
-		ti := &compiler.TreeInstance{Name: name, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: ns, Release: ns + "-" + name}}
+		ti := &tree.Instance{Name: name, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: ns, Release: ns + "-" + name}}
 		if slices.Contains(refused, n) {
 			ti.Outcome.Err = errors.New("refused")
 		} else {
@@ -231,7 +233,7 @@ func TestAReleaseCollisionKeepsItsProjects(t *testing.T) {
 // differs: a target that writes one file, of its content.
 type differs string
 
-func (d differs) Files([]*compiler.Result, *compiler.Graph) (map[string][]byte, error) {
+func (d differs) Files([]*compiler.Result, *tree.Graph) (map[string][]byte, error) {
 	return map[string][]byte{"projects/x": []byte(d)}, nil
 }
 
@@ -305,7 +307,7 @@ func TestFilesRederive(t *testing.T) {
 // that is not in the output is none.
 func TestFilesUnloaded(t *testing.T) {
 	tr := compiled([]string{"data/db"})
-	tr.Refused = []compiler.RefusedProject{
+	tr.Refused = []tree.Refused{
 		{Namespace: "demo", Problems: []string{"db/projects/demo/instances/x/values.yaml: not a file"}, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "demo"}, Own: true},
 		{Namespace: "lost", Problems: []string{"db/projects/lost/project.yaml: parse"}, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "lost"}},
 		{Namespace: "new", Problems: []string{"db/projects/new/instances/x/values.yaml: not a file"}, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "new"}, Own: true},
@@ -351,7 +353,7 @@ func TestFilesDropped(t *testing.T) {
 	for _, ti := range tr.Instances {
 		ti.Inputs.Context = reserved
 	}
-	tr.Refused = []compiler.RefusedProject{{Namespace: "loose", Problems: []string{"x"}, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "loose", Context: reserved}, Own: true}}
+	tr.Refused = []tree.Refused{{Namespace: "loose", Problems: []string{"x"}, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "loose", Context: reserved}, Own: true}}
 	previous := fstest.MapFS{}
 	for _, ns := range []string{"openbao", "kube-system", "demo"} {
 		previous["projects/"+ns+"/kustomization.yaml"] = file("old " + ns + "\n")

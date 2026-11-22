@@ -10,6 +10,8 @@
 package flux
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"fmt"
 	"maps"
@@ -106,7 +108,7 @@ func (Target) CheckInstance(res *compiler.Result) error {
 // namespaces take a name a release cannot (a dot: okdp.projects), the
 // HelmReleases being named after the releases, their values ConfigMaps
 // values-<release>, the projects' ServiceAccounts project-<namespace>.
-func (t Target) Files(results []*compiler.Result, g *compiler.Graph) (map[string][]byte, error) {
+func (t Target) Files(results []*compiler.Result, g *tree.Graph) (map[string][]byte, error) {
 	if err := t.check(); err != nil {
 		return nil, err
 	}
@@ -128,7 +130,7 @@ func (t Target) Files(results []*compiler.Result, g *compiler.Graph) (map[string
 			return nil, fmt.Errorf("%s/%s: %s is %d bytes, more than the %d of the ConfigMap its HelmRelease reads it from", res.Namespace, res.Release, helm.ValuesFile, n, ConfigMapMax)
 		}
 		var dependsOn []string
-		for _, n := range g.DependsOn(compiler.GraphNode{Namespace: res.Namespace, Release: res.Release}) {
+		for _, n := range g.DependsOn(tree.GraphNode{Namespace: res.Namespace, Release: res.Release}) {
 			dependsOn = append(dependsOn, n.Release)
 		}
 		for name, data := range t.Instance(res.Namespace, res.Release, path.Join(t.PathPrefix, dir), dependsOn, res.Privileged) {

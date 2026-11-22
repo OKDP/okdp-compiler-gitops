@@ -2,11 +2,11 @@ package gitops
 
 import "github.com/okdp/okdp-gitops/treeedit"
 
-// The tree is okdp-compiler's (compiler.LoadRepository, package
+// The tree is okdp-compiler's (tree.Load, package
 // treeedit): platform.yaml, beside it treeedit.CatalogsFile and, in a
 // split topology, treeedit.ProjectsFile, and projects/<project>/ with
 // its project.yaml and its instances; its names and its paths are the
-// compiler's (compiler.PlatformFile, treeedit.ProjectDir...). The output,
+// compiler's (tree.PlatformFile, treeedit.ProjectDir...). The output,
 // CompiledDir, is what a compile writes, in a repository of its own.
 const (
 	// CompiledDir holds the output: the files of okdp-compiler's Flux and

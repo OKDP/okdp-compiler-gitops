@@ -1,6 +1,8 @@
 package deploy_test
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"errors"
 	"io/fs"
@@ -33,17 +35,17 @@ import (
 // it in InstanceDir, under ProjectDir.
 func TestTreeNames(t *testing.T) {
 	file := func(s string) *fstest.MapFile { return &fstest.MapFile{Data: []byte(s)} }
-	instance := path.Join(compiler.ProjectsDir, "demo", compiler.InstancesDir, "web")
-	tree := fstest.MapFS{
-		compiler.PlatformFile:                                         file("global: {okdp: {}}\n"),
-		path.Join(compiler.ContractsDir, "http.schema.json"):          file(`{"properties": {"url": {"type": "string"}}}`),
-		path.Join(compiler.CatalogDir, "web", "1.0.0", "Chart.yaml"):  file("apiVersion: v2\nname: web\nversion: 1.0.0\n"),
-		path.Join(compiler.ProjectsDir, "demo", compiler.ProjectFile): file("connections: {api: {contract: http, url: https://api.example.org}}\n"),
-		path.Join(instance, compiler.InstanceFile):                    file("service: web\nversion: 1.0.0\n"),
-		path.Join(instance, compiler.ConnectionsFile):                 file("connections: {own: {contract: http, url: https://own.example.org}}\n"),
-		path.Join(instance, compiler.ConfigFile):                      file("{}\n"),
+	instance := path.Join(tree.ProjectsDir, "demo", tree.InstancesDir, "web")
+	src := fstest.MapFS{
+		tree.PlatformFile: file("global: {okdp: {}}\n"),
+		path.Join(tree.ContractsDir, "http.schema.json"):         file(`{"properties": {"url": {"type": "string"}}}`),
+		path.Join(tree.CatalogDir, "web", "1.0.0", "Chart.yaml"): file("apiVersion: v2\nname: web\nversion: 1.0.0\n"),
+		path.Join(tree.ProjectsDir, "demo", tree.ProjectFile):     file("connections: {api: {contract: http, url: https://api.example.org}}\n"),
+		path.Join(instance, tree.InstanceFile):                   file("service: web\nversion: 1.0.0\n"),
+		path.Join(instance, tree.ConnectionsFile):                file("connections: {own: {contract: http, url: https://own.example.org}}\n"),
+		path.Join(instance, tree.ConfigFile):                     file("{}\n"),
 	}
-	instances, err := loadRepository([]compiler.Repository{{Name: "db", FS: tree, Role: compiler.RoleTree}})
+	instances, err := loadRepository([]tree.Repository{{Name: "db", FS: src, Role: tree.RoleTree}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,14 +53,14 @@ func TestTreeNames(t *testing.T) {
 		t.Fatalf("got %d instances, want one with its 3 context layers and its values", len(instances))
 	}
 	in := instances[0].Inputs
-	if want := compiler.ReleaseName("demo", "web"); in.Release != want || want != "demo-web" || in.Namespace != "demo" {
+	if want := tree.ReleaseName("demo", "web"); in.Release != want || want != "demo-web" || in.Namespace != "demo" {
 		t.Errorf("release %s/%s, want demo/%s", in.Namespace, in.Release, want)
 	}
 	res, err := compiler.Compile(t.Context(), instances[0].Definition, in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := compiler.NewGraph([]*compiler.Result{res})
+	g, err := tree.NewGraph([]*compiler.Result{res})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,10 +92,10 @@ func (c *charts) Get(_ context.Context, ref compiler.ChartRef) error {
 
 func (c *charts) FS() fs.FS { return c.fsys }
 
-// loadRepository: compiler.LoadRepository with the standard rule set, each
+// loadRepository: tree.Load with the standard rule set, each
 // instance with it and Helm's merge of the final values.
-func loadRepository(repos []compiler.Repository) ([]compiler.Instance, error) {
-	instances, err := compiler.LoadRepository(context.Background(), repos, rules.Standard())
+func loadRepository(repos []tree.Repository) ([]compiler.Instance, error) {
+	instances, err := tree.Load(context.Background(), repos, rules.Standard())
 	for i := range instances {
 		instances[i].Inputs.Rules, instances[i].Inputs.Finalize = rules.Standard(), helmvalues.New(nil)
 	}
@@ -104,15 +106,15 @@ func loadRepository(repos []compiler.Repository) ([]compiler.Instance, error) {
 // before the compile, then the values checked against them; unchecked, and
 // why, when one cannot be fetched.
 func TestBuildCharts(t *testing.T) {
-	repos := []compiler.Repository{{Name: "db", FS: os.DirFS("../examples/04_claims/input/db"), Role: compiler.RoleTree}}
+	repos := []tree.Repository{{Name: "db", FS: os.DirFS("../examples/04_claims/input/db"), Role: tree.RoleTree}}
 	away := &charts{err: errors.New("the registry is away")}
 	failed := deploy.NewCharts(away)
-	tree, err := deploy.Build(t.Context(), repos, deploy.BuildOptions{Charts: failed})
+	built, err := deploy.Build(t.Context(), repos, deploy.BuildOptions{Charts: failed})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(failed.Failures()) == 0 || tree.Problems() != nil || tree.Graph == nil {
-		t.Errorf("unchecked: failures %v, problems %q", failed.Failures(), tree.Problems())
+	if len(failed.Failures()) == 0 || built.Problems() != nil || built.Graph == nil {
+		t.Errorf("unchecked: failures %v, problems %q", failed.Failures(), built.Problems())
 	}
 	for ref, err := range failed.Failures() {
 		if !errors.Is(err, away.err) {
@@ -124,12 +126,12 @@ func TestBuildCharts(t *testing.T) {
 	}
 	empty := &charts{fsys: fstest.MapFS{}}
 	checked := deploy.NewCharts(empty)
-	tree, err = deploy.Build(t.Context(), repos, deploy.BuildOptions{Charts: checked})
+	built, err = deploy.Build(t.Context(), repos, deploy.BuildOptions{Charts: checked})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if checked.Failures() != nil || tree.Problems() == nil || !strings.Contains(strings.Join(tree.Problems(), "\n"), "is not in the chart cache: helm pull ") {
-		t.Errorf("checked against a cache without the charts: failures %v, problems %q", checked.Failures(), tree.Problems())
+	if checked.Failures() != nil || built.Problems() == nil || !strings.Contains(strings.Join(built.Problems(), "\n"), "is not in the chart cache: helm pull ") {
+		t.Errorf("checked against a cache without the charts: failures %v, problems %q", checked.Failures(), built.Problems())
 	}
 	if !reflect.DeepEqual(empty.refs, away.refs) {
 		t.Errorf("refs: %v, then %v", away.refs, empty.refs)
@@ -144,14 +146,14 @@ func TestAccess(t *testing.T) {
 	file := func(s string) *fstest.MapFile { return &fstest.MapFile{Data: []byte(s)} }
 	platform := "global: {okdp: {access: {admins: [platform_admin], groupPrefix: 'oidc:'}}}\n"
 	project := "description: the demo\naccess:\n  okdp-project-demo: admin\n  analysts: viewer\n"
-	tree := fstest.MapFS{
-		compiler.PlatformFile: file(platform),
-		path.Join(compiler.CatalogDir, "web", "1.0.0", "Chart.yaml"):                           file("apiVersion: v2\nname: web\nversion: 1.0.0\n"),
-		path.Join(compiler.ProjectsDir, "demo", compiler.ProjectFile):                          file(project),
-		path.Join(compiler.ProjectsDir, "demo", compiler.InstancesDir, "web", "instance.yaml"): file("service: web\nversion: 1.0.0\n"),
-		path.Join(compiler.ProjectsDir, "ops", compiler.InstancesDir, "web", "instance.yaml"):  file("service: web\nversion: 1.0.0\n"),
+	src := fstest.MapFS{
+		tree.PlatformFile: file(platform),
+		path.Join(tree.CatalogDir, "web", "1.0.0", "Chart.yaml"):                      file("apiVersion: v2\nname: web\nversion: 1.0.0\n"),
+		path.Join(tree.ProjectsDir, "demo", tree.ProjectFile):                          file(project),
+		path.Join(tree.ProjectsDir, "demo", tree.InstancesDir, "web", "instance.yaml"): file("service: web\nversion: 1.0.0\n"),
+		path.Join(tree.ProjectsDir, "ops", tree.InstancesDir, "web", "instance.yaml"):  file("service: web\nversion: 1.0.0\n"),
 	}
-	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: "db", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{})
+	tr, err := deploy.Build(t.Context(), []tree.Repository{{Name: "db", FS: src, Role: tree.RoleTree}}, deploy.BuildOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,8 +206,8 @@ func TestAccess(t *testing.T) {
 // it, its AppProject confined; a role taken back, its RoleBinding gone.
 func TestPartialRederives(t *testing.T) {
 	file := func(s string) *fstest.MapFile { return &fstest.MapFile{Data: []byte(s)} }
-	tree := fstest.MapFS{
-		compiler.PlatformFile:                    file("global: {okdp: {policy: {privileged: [ops]}}}\n"),
+	src := fstest.MapFS{
+		tree.PlatformFile:                         file("global: {okdp: {policy: {privileged: [ops]}}}\n"),
 		"catalog/admin/1.0.0/Chart.yaml":         file("apiVersion: v2\nname: admin\nversion: 1.0.0\ndependencies:\n  - {name: hello, alias: app, repository: https://charts.example.org, version: 1.0.0}\n"),
 		"catalog/admin/1.0.0/okdp.yaml":          file("objects:\n  - {apiVersion: rbac.authorization.k8s.io/v1, kind: ClusterRoleBinding, metadata: {name: ops-admin}, roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: cluster-admin}, subjects: [{kind: ServiceAccount, name: default, namespace: ops}]}\n"),
 		"catalog/admin/1.0.0/config.schema.json": file(`{"type": "object", "properties": {"n": {"type": "integer"}}}`),
@@ -213,8 +215,8 @@ func TestPartialRederives(t *testing.T) {
 		"projects/ops/instances/x/instance.yaml": file("service: admin\nversion: 1.0.0\n"),
 	}
 	targets := []deploy.Target{deploy.Flux{}, deploy.ArgoCD{RepoURL: "https://git.example.org/out.git"}}
-	build := func() *compiler.Tree {
-		tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: "db", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{})
+	build := func() *tree.Tree {
+		tr, err := deploy.Build(t.Context(), []tree.Repository{{Name: "db", FS: src, Role: tree.RoleTree}}, deploy.BuildOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -235,10 +237,10 @@ func TestPartialRederives(t *testing.T) {
 	}
 	// The platform revokes the privilege, the project takes its role back;
 	// an instance of it is refused, which keeps the project.
-	tree[compiler.PlatformFile] = file("global: {okdp: {policy: {privileged: []}}}\n")
-	tree["projects/ops/project.yaml"] = file("access: {}\n")
-	tree["projects/ops/instances/broken/instance.yaml"] = file("service: admin\nversion: 1.0.0\n")
-	tree["projects/ops/instances/broken/config.yaml"] = file("n: notanumber\n")
+	src[tree.PlatformFile] = file("global: {okdp: {policy: {privileged: []}}}\n")
+	src["projects/ops/project.yaml"] = file("access: {}\n")
+	src["projects/ops/instances/broken/instance.yaml"] = file("service: admin\nversion: 1.0.0\n")
+	src["projects/ops/instances/broken/config.yaml"] = file("n: notanumber\n")
 	second, kept, err := deploy.TreeFiles(build(), targets, previous, nil)
 	if err != nil {
 		t.Fatal(err)

@@ -6,6 +6,8 @@
 package deploy
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"io/fs"
 	"slices"
@@ -77,14 +79,14 @@ func StaticCharts(fsys fs.FS) ChartSource { return chartcheck.Static(fsys) }
 // nil src: none checked. A Charts is valid for one build.
 func NewCharts(src ChartSource) *Charts { return chartcheck.New(src) }
 
-// BuildOptions: compiler.BuildOptions, with what okdp-gitops adds to a
+// BuildOptions: tree.BuildOptions, with what okdp-gitops adds to a
 // build.
 type BuildOptions struct {
-	compiler.BuildOptions
+	tree.BuildOptions
 	// Charts, when set, checks the final values against the upstream charts
 	// (chartcheck): their schemas over their defaults, the lists an instance
 	// appends to. Build fetches the charts of every Chart.yaml of the tree
-	// before the compile (compiler.BuildOptions.Loaded), so that no fetch
+	// before the compile (tree.BuildOptions.Loaded), so that no fetch
 	// counts against an instance's timeout. A chart that cannot be fetched
 	// leaves its keys unchecked (Charts.Failures), and refuses the upstream
 	// values a project that is not privileged gives it (CheckRendered).
@@ -96,10 +98,10 @@ type BuildOptions struct {
 	SkipRender bool
 }
 
-// Build: compiler.Build with the standard rule set, Helm's merge of the
+// Build: tree.Build with the standard rule set, Helm's merge of the
 // final values and the platform's policy, checked against opts.Charts,
 // unless the caller gives a rule set, a Finalize or a CheckGlobals.
-func Build(ctx context.Context, repos []compiler.Repository, opts BuildOptions) (*compiler.Tree, error) {
+func Build(ctx context.Context, repos []tree.Repository, opts BuildOptions) (*tree.Tree, error) {
 	o := opts.BuildOptions
 	o.Rules = rules.Or(o.Rules)
 	if o.Finalize == nil {
@@ -121,7 +123,7 @@ func Build(ctx context.Context, repos []compiler.Repository, opts BuildOptions) 
 			}
 		}
 	}
-	return compiler.Build(ctx, repos, o)
+	return tree.Build(ctx, repos, o)
 }
 
 // dependencies: the upstream charts of the Chart.yaml of instances, once
@@ -152,13 +154,13 @@ func CoalesceValues(values, defaults map[string]any) (map[string]any, error) {
 // last, and the projects kept as they are (output.Files); charts, the
 // upstream charts the withdrawal of a refused instance renders
 // (Charts.FS), nil for none.
-func TreeFiles(t *compiler.Tree, targets []Target, previous, charts fs.FS) (map[string][]byte, []compiler.KeptProject, error) {
+func TreeFiles(t *tree.Tree, targets []Target, previous, charts fs.FS) (map[string][]byte, []tree.Kept, error) {
 	return output.Files(t, targets, previous, charts)
 }
 
 // ReleaseTaken: the compiled instance of t, of another namespace, whose
 // release the instance name of namespace has too; nil when none.
-func ReleaseTaken(t *compiler.Tree, namespace, name string) *compiler.TreeInstance {
+func ReleaseTaken(t *tree.Tree, namespace, name string) *tree.Instance {
 	return output.ReleaseTaken(t, namespace, name)
 }
 

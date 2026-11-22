@@ -1,6 +1,8 @@
 package gitops
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"errors"
 	"fmt"
@@ -12,7 +14,6 @@ import (
 	"strings"
 	"sync"
 
-	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-gitops/treeedit"
 )
 
@@ -23,7 +24,7 @@ var OutputDirs = []string{CompiledDir, path.Dir(ArgoCDRootPath), SourcesFile}
 
 // LayoutPaths are the paths of a repository (by Location.Repository) that
 // the layout of t routes to it, as Repositories does, sorted, none under
-// another: the platform's files (compiler.PlatformFile, treeedit.CatalogsFile,
+// another: the platform's files (tree.PlatformFile, treeedit.CatalogsFile,
 // treeedit.ProjectsFile), the directory of the projects, the output's directories
 // (OutputDirs); "." for the whole repository. A compile reads nothing
 // else of it. projects is the treeedit.ProjectsFile of a split topology, its
@@ -42,7 +43,7 @@ func (t *Topology) LayoutPaths(repository string, projects *treeedit.ProjectsLis
 	}
 	platform, output := t.Platform.Repository() == repository, t.Output.Repository() == repository
 	if platform {
-		add(t.Platform.Path, compiler.PlatformFile, treeedit.CatalogsFile, treeedit.ProjectsFile)
+		add(t.Platform.Path, tree.PlatformFile, treeedit.CatalogsFile, treeedit.ProjectsFile)
 	}
 	if output {
 		add(t.Output.Path, OutputDirs...)
@@ -318,7 +319,7 @@ func (t *routed) resolve(p string) (target, error) {
 		return j
 	}
 	switch {
-	case first == compiler.ProjectsDir:
+	case first == tree.ProjectsDir:
 		if rest == "" {
 			return target{projects: true}, nil
 		}

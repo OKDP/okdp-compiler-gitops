@@ -14,6 +14,8 @@
 package main
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"cmp"
 	"context"
 	"errors"
@@ -38,8 +40,8 @@ var version string
 
 // options: the command-line flags.
 type options struct {
-	repositories      []string      // --repository: the tree's parts (compiler.RoleTree)
-	catalogs          []string      // --catalog: catalogs, catalog/ and contracts/ only (compiler.RoleCatalog)
+	repositories      []string      // --repository: the tree's parts (tree.RoleTree)
+	catalogs          []string      // --catalog: catalogs, catalog/ and contracts/ only (tree.RoleCatalog)
 	charts            string        // --charts, with --check
 	output            string        // --output, -o
 	check             bool          // --check
@@ -284,7 +286,7 @@ func checkOptions(o options) error {
 
 // inputs: the repositories and the chart cache the command reads, open.
 type inputs struct {
-	repos   []compiler.Repository
+	repos   []tree.Repository
 	charts  deploy.ChartSource // nil without --charts
 	closers []func()
 }
@@ -308,7 +310,7 @@ func openInputs(o options) (*inputs, error) {
 			return nil, err
 		}
 		in.closers = append(in.closers, fsys.Close)
-		in.repos = append(in.repos, compiler.Repository{Name: d.dir, FS: fsys, Role: d.role})
+		in.repos = append(in.repos, tree.Repository{Name: d.dir, FS: fsys, Role: d.role})
 	}
 	if o.charts != "" {
 		fsys, err := dirfs.NewCharts("--charts", o.charts)
@@ -334,7 +336,7 @@ func (in *inputs) chartsFS() fs.FS {
 // --timeout, each instance within --cost-limit and --instance-timeout; past
 // the timeout, every instance is recorded as skipped in rep and an error
 // returned.
-func buildTree(o options, in *inputs, rep *report) (*compiler.Tree, error) {
+func buildTree(o options, in *inputs, rep *report) (*tree.Tree, error) {
 	ctx := context.Background()
 	if o.timeout > 0 {
 		var cancel context.CancelFunc
@@ -360,7 +362,7 @@ func buildTree(o options, in *inputs, rep *report) (*compiler.Tree, error) {
 // printOutcomes: the problems of the projects that do not load, then for
 // each instance its claims' bindings, its refusal or its warnings, in
 // their order, on stderr and recorded in rep; whether anything is refused.
-func printOutcomes(t *compiler.Tree, rep *report) (refused bool) {
+func printOutcomes(t *tree.Tree, rep *report) (refused bool) {
 	// A project that does not load: its problems, which refuse it and not
 	// the tree.
 	for _, r := range t.Refused {
@@ -427,7 +429,7 @@ type keptProjects struct {
 // instances, printed and recorded in rep: an instance of a kept project
 // that depends on a release of one whose output is kept (--partial), or a
 // problem of the graph of its own.
-func recordKept(o options, kept []compiler.KeptProject, rep *report) keptProjects {
+func recordKept(o options, kept []tree.Kept, rep *report) keptProjects {
 	k := keptProjects{dropped: map[string]string{}}
 	for _, p := range kept {
 		k.namespaces = append(k.namespaces, p.Namespace)
@@ -472,7 +474,7 @@ func printNotWritten(o options, k keptProjects, rep *report) {
 // printDependencies: the dependencies of the instances of t that compile,
 // those of a project kept left out, on stderr: <namespace>/<release>:
 // depends on <instance> (<contract> <output>, <field>).
-func printDependencies(t *compiler.Tree, keep []string) {
+func printDependencies(t *tree.Tree, keep []string) {
 	for _, ti := range t.Instances {
 		res := ti.Outcome.Result
 		if res == nil || slices.Contains(keep, res.Namespace) {
@@ -497,12 +499,12 @@ func openDir(flag, dir string) (*dirfs.FS, error) { return dirfs.New(flag, dir) 
 
 // graphErrors: err, the problems of the graph at the release of ti, each
 // printed, error: <namespace>/<release>: <error>, and recorded in rep.
-func graphErrors(ti *compiler.TreeInstance, err error, rep *report) {
+func graphErrors(ti *tree.Instance, err error, rep *report) {
 	if err == nil {
 		return
 	}
 	for _, e := range unjoin(err) {
-		ge := &compiler.GraphError{Node: compiler.GraphNode{Namespace: ti.Namespace(), Release: ti.Release()}, Err: e}
+		ge := &tree.GraphError{Node: tree.GraphNode{Namespace: ti.Namespace(), Release: ti.Release()}, Err: e}
 		fmt.Fprintln(os.Stderr, "error:", ge)
 		rep.graphError(ge)
 	}
@@ -553,18 +555,18 @@ func newTarget(o options) (deploy.Target, error) {
 // role in the tree.
 type inputDir struct {
 	flag, dir string
-	role      compiler.Role
+	role      tree.Role
 }
 
 // inputDirs: the directories of o the command reads, --repository's
-// (compiler.RoleTree) then --catalog's (compiler.RoleCatalog), in order.
+// (tree.RoleTree) then --catalog's (tree.RoleCatalog), in order.
 func inputDirs(o options) []inputDir {
 	var out []inputDir
 	for _, dir := range o.repositories {
-		out = append(out, inputDir{"--repository", dir, compiler.RoleTree})
+		out = append(out, inputDir{"--repository", dir, tree.RoleTree})
 	}
 	for _, dir := range o.catalogs {
-		out = append(out, inputDir{"--catalog", dir, compiler.RoleCatalog})
+		out = append(out, inputDir{"--catalog", dir, tree.RoleCatalog})
 	}
 	return out
 }

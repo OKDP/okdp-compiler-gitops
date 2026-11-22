@@ -1,6 +1,8 @@
 package chartcache
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
@@ -358,7 +360,7 @@ func TestFSFollowsNoLink(t *testing.T) {
 // each chart has its own budget (dirfs.NewCharts).
 func TestEachChartHasItsBudget(t *testing.T) {
 	dir := t.TempDir()
-	tree := fstest.MapFS{"platform.yaml": {Data: []byte("{}\n")}}
+	src := fstest.MapFS{"platform.yaml": {Data: []byte("{}\n")}}
 	chart := func(repo, name, values string) {
 		cd := filepath.Join(dir, repo, name+"-1.0.0", name)
 		if err := os.MkdirAll(cd, 0o755); err != nil {
@@ -371,20 +373,20 @@ func TestEachChartHasItsBudget(t *testing.T) {
 		}
 	}
 	service := func(svc, name, repo string) {
-		tree["catalog/"+svc+"/1.0.0/Chart.yaml"] = &fstest.MapFile{Data: fmt.Appendf(nil, "apiVersion: v2\nname: %s\nversion: 1.0.0\ndependencies:\n  - {name: %s, alias: app, repository: https://%s, version: 1.0.0}\n", svc, name, repo)}
+		src["catalog/"+svc+"/1.0.0/Chart.yaml"] = &fstest.MapFile{Data: fmt.Appendf(nil, "apiVersion: v2\nname: %s\nversion: 1.0.0\ndependencies:\n  - {name: %s, alias: app, repository: https://%s, version: 1.0.0}\n", svc, name, repo)}
 	}
 	big := "a: \"" + strings.Repeat("x", dirfs.MaxFileSize-16) + "\"\n"
 	for i := range dirfs.MaxDirSize/dirfs.MaxFileSize + 1 {
 		name := fmt.Sprintf("c%02d", i)
 		chart("big.example.org", name, big)
 		service("s"+name, name, "big.example.org")
-		tree["projects/aaa/instances/"+name+"/instance.yaml"] = &fstest.MapFile{Data: []byte("service: s" + name + "\nversion: 1.0.0\n")}
+		src["projects/aaa/instances/"+name+"/instance.yaml"] = &fstest.MapFile{Data: []byte("service: s" + name + "\nversion: 1.0.0\n")}
 	}
 	chart("charts.example.org", "hello", "x: y\n")
 	service("hello", "hello", "charts.example.org")
-	tree["projects/victim/instances/web/instance.yaml"] = &fstest.MapFile{Data: []byte("service: hello\nversion: 1.0.0\n")}
+	src["projects/victim/instances/web/instance.yaml"] = &fstest.MapFile{Data: []byte("service: hello\nversion: 1.0.0\n")}
 	charts := deploy.NewCharts(NewCache(dir, nil))
-	tr, err := deploy.Build(t.Context(), []compiler.Repository{{Name: ".", FS: tree, Role: compiler.RoleTree}}, deploy.BuildOptions{Charts: charts})
+	tr, err := deploy.Build(t.Context(), []tree.Repository{{Name: ".", FS: src, Role: tree.RoleTree}}, deploy.BuildOptions{Charts: charts})
 	if err != nil {
 		t.Fatal(err)
 	}

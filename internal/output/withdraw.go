@@ -1,6 +1,8 @@
 package output
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"fmt"
 	"io/fs"
@@ -29,7 +31,7 @@ import (
 // keeps its output so that a mistake in its sources does not take down what
 // runs: not so that a value the platform now denies stays deployed.
 // charts holds the upstream charts the check renders, nil for none.
-func withdraw(k compiler.KeptProject, files map[string][]byte, charts fs.FS) (map[string][]byte, []string) {
+func withdraw(k tree.Kept, files map[string][]byte, charts fs.FS) (map[string][]byte, []string) {
 	out := files
 	var problems []string
 	for _, inst := range k.Instances {
@@ -77,7 +79,7 @@ func dropResource(b []byte, r string) []byte {
 // or when nothing can tell: no output, no chart at hand (charts nil, or
 // a chart it lacks), a chart that does not render (the instance's refusal
 // says why it compiled no further).
-func violation(ti *compiler.TreeInstance, files map[string][]byte, charts fs.FS) error {
+func violation(ti *tree.Instance, files map[string][]byte, charts fs.FS) error {
 	ctx := context.Background() // the output of a tree is written without one
 	in := ti.Inputs
 	settings, err := compiler.PlatformOf(ctx, in)
@@ -137,7 +139,7 @@ func violation(ti *compiler.TreeInstance, files map[string][]byte, charts fs.FS)
 
 // service: the service of ti, the name of its package's chart, as a
 // compile names it to the rule set's hooks; "" without a package.
-func service(ti *compiler.TreeInstance) string {
+func service(ti *tree.Instance) string {
 	if ti.Definition == nil {
 		return ""
 	}

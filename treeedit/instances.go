@@ -1,6 +1,8 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"errors"
 	"fmt"
 	"github.com/okdp/okdp-gitops/deploy"
@@ -15,7 +17,7 @@ import (
 // Instance is an instance of the tree, projects/<project>/instances/<name>/:
 // the package of its instance.yaml, and its values, config.yaml. The
 // directory is its identity: the project is its namespace, its release
-// compiler.ReleaseName(project, name).
+// tree.ReleaseName(project, name).
 type Instance struct {
 	Project string `yaml:"-"`
 	Name    string `yaml:"-"`
@@ -35,7 +37,7 @@ type Instance struct {
 }
 
 // Release is the instance's Helm release.
-func (i Instance) Release() string { return compiler.ReleaseName(i.Project, i.Name) }
+func (i Instance) Release() string { return tree.ReleaseName(i.Project, i.Name) }
 
 // Dir is the instance's directory in the tree.
 func (i Instance) Dir() string { return InstanceDir(i.Project, i.Name) }
@@ -71,20 +73,20 @@ func ReadInstance(r Reader, project, name string) (*Instance, error) {
 
 func readInstance(r Reader, project, name string) (*Instance, error) {
 	dir := InstanceDir(project, name)
-	raw, err := r.ReadFile(path.Join(dir, compiler.InstanceFile))
+	raw, err := r.ReadFile(path.Join(dir, tree.InstanceFile))
 	if err != nil {
 		return nil, err
 	}
 	spec, err := ParseInstance(raw)
 	if err != nil {
-		return nil, fmt.Errorf("%s/%s: %w", dir, compiler.InstanceFile, err)
+		return nil, fmt.Errorf("%s/%s: %w", dir, tree.InstanceFile, err)
 	}
 	// The directory is the identity.
 	inst := Instance{Project: project, Name: name, Service: spec.Service, Version: spec.Version, Claimers: spec.Claimers}
 	inst.Values = map[string]any{}
-	if rawValues, err := r.ReadFile(path.Join(dir, compiler.ConfigFile)); err == nil {
+	if rawValues, err := r.ReadFile(path.Join(dir, tree.ConfigFile)); err == nil {
 		if inst.Values, err = DecodeValues(rawValues); err != nil {
-			return nil, fmt.Errorf("%s/%s: %w", dir, compiler.ConfigFile, err)
+			return nil, fmt.Errorf("%s/%s: %w", dir, tree.ConfigFile, err)
 		}
 	} else if !errors.Is(err, ErrNotFound) {
 		return nil, err
@@ -101,7 +103,7 @@ func ListInstances(r Reader, project string) ([]Instance, error) {
 	}
 	var out []Instance
 	for _, name := range names {
-		if !r.Exists(path.Join(InstanceDir(project, name), compiler.InstanceFile)) {
+		if !r.Exists(path.Join(InstanceDir(project, name), tree.InstanceFile)) {
 			continue
 		}
 		inst, err := readInstance(r, project, name)
@@ -133,10 +135,10 @@ func writeInstance(r Reader, c *Change, inst *Instance) error {
 		if err != nil {
 			return err
 		}
-		c.write(path.Join(dir, compiler.InstanceFile), data)
+		c.write(path.Join(dir, tree.InstanceFile), data)
 	}
 	values := RoundTrip(inst.Values)
-	config := path.Join(dir, compiler.ConfigFile)
+	config := path.Join(dir, tree.ConfigFile)
 	if (current != nil && reflect.DeepEqual(current.Values, values)) || (len(values) == 0 && !r.Exists(config)) {
 		return nil
 	}
@@ -238,7 +240,7 @@ func ReadCompiled(output fs.FS, project, name string) (*CompiledFiles, error) {
 	if err := checkRef("instance", project, name); err != nil {
 		return nil, err
 	}
-	compiled, err := deploy.ReadCompiled(output, project, compiler.ReleaseName(project, name))
+	compiled, err := deploy.ReadCompiled(output, project, tree.ReleaseName(project, name))
 	if errors.Is(err, fs.ErrNotExist) && !errors.Is(err, ErrNotFound) {
 		return nil, fmt.Errorf("%w: %w", ErrNotFound, err)
 	}
@@ -278,7 +280,7 @@ func ListPublished(r Reader, output fs.FS, project string) ([]Published, error) 
 	}
 	byRelease := map[string]string{}
 	for _, name := range names {
-		byRelease[compiler.ReleaseName(project, name)] = name
+		byRelease[tree.ReleaseName(project, name)] = name
 	}
 	compiled, err := deploy.ReadPublished(output, project)
 	if err != nil {

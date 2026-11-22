@@ -1,12 +1,12 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"errors"
 	"fmt"
 	"io/fs"
 	"path"
-
-	compiler "github.com/okdp/okdp-compiler"
 
 	"github.com/okdp/okdp-gitops/internal/mapfs"
 )
@@ -53,14 +53,14 @@ func TreeTooLargeError(limit int64) error {
 }
 
 // ReadSources reads the parts of the tree r holds that a compile reads,
-// platform.yaml (compiler.PlatformFile), CatalogsFile (whose menu the
+// platform.yaml (tree.PlatformFile), CatalogsFile (whose menu the
 // compile checks) and every file under projects/, at their paths, as the
-// tree compiler.LoadRepository takes: a file of MaxTreeFileSize at most,
+// tree tree.Load takes: a file of MaxTreeFileSize at most,
 // MaxTreeSize together (ErrTooLarge); a path that is, or goes through, a
 // symbolic link fails it (ErrSymlink). Nothing else of r is read.
 func ReadSources(r Reader) (mapfs.FS, error) {
 	c := &sources{tree: mapfs.FS{}}
-	for _, p := range []string{compiler.PlatformFile, CatalogsFile} {
+	for _, p := range []string{tree.PlatformFile, CatalogsFile} {
 		data, err := r.ReadFile(p)
 		switch {
 		case err == nil:
@@ -71,7 +71,7 @@ func ReadSources(r Reader) (mapfs.FS, error) {
 			return nil, err
 		}
 	}
-	projects, err := r.ReadDir(compiler.ProjectsDir)
+	projects, err := r.ReadDir(tree.ProjectsDir)
 	if err != nil {
 		return nil, err
 	}

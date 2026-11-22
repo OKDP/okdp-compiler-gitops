@@ -23,8 +23,8 @@ func TestMain(m *testing.M) {
 	testscript.Main(m, map[string]func(){"okdp-compile": main})
 }
 
-// tree: the files under dir, path -> content.
-func tree(t *testing.T, dir string) map[string]string {
+// listFiles: the files under dir, path -> content.
+func listFiles(t *testing.T, dir string) map[string]string {
 	t.Helper()
 	files := map[string]string{}
 	err := filepath.WalkDir(dir, func(path string, e fs.DirEntry, err error) error {
@@ -46,7 +46,7 @@ func tree(t *testing.T, dir string) map[string]string {
 // outdir.MarkerFile checked and left out: the files of the target.
 func output(t *testing.T, dir string) map[string]string {
 	t.Helper()
-	files := tree(t, dir)
+	files := listFiles(t, dir)
 	if got := files[filepath.FromSlash(outdir.MarkerFile)]; got != outdir.Marker {
 		t.Errorf("%s: %q", outdir.MarkerFile, got)
 	}
@@ -74,7 +74,7 @@ func TestRun(t *testing.T) {
 			if err := run(options{repositories: []string{filepath.Join(examples, example, "input", "db")}, output: dir}); err != nil {
 				t.Fatal(err)
 			}
-			if got, want := output(t, dir), tree(t, filepath.Join(examples, example, "output")); !maps.Equal(got, want) {
+			if got, want := output(t, dir), listFiles(t, filepath.Join(examples, example, "output")); !maps.Equal(got, want) {
 				t.Errorf("got %v, want the example's output: %v", slices.Sorted(maps.Keys(got)), slices.Sorted(maps.Keys(want)))
 			}
 		})
@@ -107,7 +107,7 @@ func TestRun(t *testing.T) {
 		if err := run(options{repositories: repos, output: dir}); err != nil {
 			t.Fatal(err)
 		}
-		if got, want := output(t, dir), tree(t, filepath.Join(examples, "03_full", "output")); !maps.Equal(got, want) {
+		if got, want := output(t, dir), listFiles(t, filepath.Join(examples, "03_full", "output")); !maps.Equal(got, want) {
 			t.Errorf("%v: got %v", order, slices.Sorted(maps.Keys(got)))
 		}
 	}
@@ -148,7 +148,7 @@ func TestRunErrors(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("got %v, want an error containing %q", err, tc.want)
 			}
-			if after := tree(t, dir); len(after) > 0 {
+			if after := listFiles(t, dir); len(after) > 0 {
 				t.Errorf("written: %v", slices.Sorted(maps.Keys(after)))
 			}
 		})
@@ -170,7 +170,7 @@ func TestRunCheck(t *testing.T) {
 			if err := run(options{repositories: []string{filepath.Join(full, "input", "db")}, charts: charts, check: true}); err != nil {
 				t.Fatal(err)
 			}
-			if after := tree(t, dir); len(after) > 0 {
+			if after := listFiles(t, dir); len(after) > 0 {
 				t.Errorf("written: %v", slices.Sorted(maps.Keys(after)))
 			}
 		})

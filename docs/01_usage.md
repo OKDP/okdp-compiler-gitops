@@ -127,7 +127,7 @@ A compile:
 3. fetches the catalogs of `catalogs.yaml`, each at its ref only, its
    last commit, and compiles the tree with
    okdp-compiler, its mandatory rule set given (`deploy.Build`):
-   `compiler.LoadRepository` of its parts (`catalogs.yaml` among them,
+   `tree.Load` of its parts (`catalogs.yaml` among them,
    its menu checked against the catalogs) and the catalogs, with
    `--charts` the upstream charts fetched, `CompileTree`, the final
    values checked against the charts ([the compile](specs/02_compile.md));
@@ -922,25 +922,26 @@ applies an edit and its check, and commits the change.
 |---|---|
 | `gitops` | the stores: `Store` (`View`, a `treeedit.Reader`; `Update`, a `Tx`, a `treeedit.Writer`), `GitStore` (a Git remote, go-git), `MemoryStore`, `Repositories` (the parts of a `Topology`); `Credentials`: the credentials of the repositories, the catalogs and the Forgejo API, the `http://` hosts allowed; `Compiler`: the compile of the tree a store holds (`SkipRender`: no render of the charts, for a long-running process; [the render](specs/05_rules.md#the-render)); `Deployments`: the edits of `treeedit` committed (`Apply`, a method per edit), the reads of the tree and of the output through `treeedit`, the output (`WriteCompiled`); `ForgejoClient`; the workflow of the output (`OutputWorkflow`) |
 | `catalog` | the catalogs of `catalogs.yaml` (each a `treeedit.CatalogRepository`): `Loader` (Git repositories at their ref, local directories), `Catalogs`, indexed by okdp-compiler (`Index`, a `compiler.Catalog`: services, versions, packages, contracts) |
-| `deploy` | `Build(ctx, repos, BuildOptions)`: `compiler.Build` with the compiler's mandatory rule set, Helm's merge and the policy, each unless the caller gives another, the final values checked against the upstream charts of `BuildOptions.Charts` (`SkipRender`: the same `Finalize`, the charts not rendered); `ChartSource` (a `chartcache.Cache`, or `StaticCharts(fsys)`, a directory filled already), `NewCharts(src)`, the `Charts` of one build (`Failures`, `FS`); `CoalesceValues(values, defaults)`: values over a chart's defaults as Helm coalesces them; the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`); `TreeFiles(t, targets, previous, charts)`: the files of a tree; `Write`: those of one compile for a plain `helm install`; `ReadCompiled`, `ReadPublished`, `ReadArgoRoot`, `ProjectAccess`, `CheckReleases` |
+| `deploy` | `Build(ctx, repos, BuildOptions)`: `tree.Build` with the compiler's mandatory rule set, Helm's merge and the policy, each unless the caller gives another, the final values checked against the upstream charts of `BuildOptions.Charts` (`SkipRender`: the same `Finalize`, the charts not rendered); `ChartSource` (a `chartcache.Cache`, or `StaticCharts(fsys)`, a directory filled already), `NewCharts(src)`, the `Charts` of one build (`Failures`, `FS`); `CoalesceValues(values, defaults)`: values over a chart's defaults as Helm coalesces them; the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`); `TreeFiles(t, targets, previous, charts)`: the files of a tree; `Write`: those of one compile for a plain `helm install`; `ReadCompiled`, `ReadPublished`, `ReadArgoRoot`, `ProjectAccess`, `CheckReleases` |
 | `rules` | `Standard`: the compiler's mandatory rule set with the security set added ([the policy](specs/05_rules.md)) |
+| `tree` | the tree loaded and compiled: `Load`, `LoadProjects`, `LoadCatalog`, `Build(ctx, repos, BuildOptions)`, `Compile`, `Partial`, `Regressions`, `NewGraph`; `Tree`, `Instance`, `Kept`, `LoadError`; `Repository`, `RoleTree`, `RoleCatalog`, the names of the layout (`PlatformFile`, `ProjectsDir`...), `ReleaseName`, `ParseInstance`, `ParseCatalogs`, `CheckMenu` |
 | `treeedit` | the tree read, its edits and their checks: `Reader`, `Writer`, `Apply`, `Check.Verify`, `ReadSources`, `OutputTargets`, `OutputFS`, `WriteOutput` |
 | `chartcache` | the chart cache of the checks, a `deploy.ChartSource` (`Get` pulls a chart it lacks, `FS` gives them): `NewCache`, `NewRepositoryPuller`, set as `Compiler.Charts` |
 
-A program that calls `compiler.Build` itself, without `deploy.Build`,
+A program that calls `tree.Build` itself, without `deploy.Build`,
 compiles with okdp-compiler's mandatory rules alone: no namespace, object,
 upstream or host policy, and no check against the upstream charts, which
 okdp-compiler does not read.
 
 `deploy.Build` with `BuildOptions.Charts` fetches the upstream charts of
 every `Chart.yaml` of the tree once the tree loads, before any instance
-compiles (`compiler.BuildOptions.Loaded`, which it chains to the
+compiles (`tree.BuildOptions.Loaded`, which it chains to the
 caller's): no fetch counts against `InstanceTimeout`. A `Charts`
 (`deploy.NewCharts`) serves one build: each chart fetched once, read
 once, its schema compiled once; a fetch the context ends is not recorded
 as a failure. `Charts.Failures` says why each chart that could not be
 fetched could not be: the keys it renders are unchecked. `deploy.Build`
-replaces `compiler.BuildOptions` in its signature, and `SkipRender`
+replaces `tree.BuildOptions` in its signature, and `SkipRender`
 replaces `deploy.WithoutRender()`; okdp-compiler no longer has
 `Inputs.Charts`, `CompileTree`'s chart source, `StaticCharts`,
 `ChartFailures` nor `CoalesceValues`: they are `deploy`'s.
@@ -959,10 +960,9 @@ import (
 	"log"
 	"os"
 
-	compiler "github.com/okdp/okdp-compiler"
-
 	"github.com/okdp/okdp-gitops/catalog"
 	"github.com/okdp/okdp-gitops/gitops"
+	"github.com/okdp/okdp-gitops/tree"
 	"github.com/okdp/okdp-gitops/treeedit"
 )
 
@@ -992,7 +992,7 @@ func main() {
 	// The compile of the tree: the claims bound to each provider.
 	t, err := d.Tree(ctx)
 	if err != nil {
-		log.Fatal(err) // a *compiler.LoadError: every problem of the load
+		log.Fatal(err) // a *tree.LoadError: every problem of the load
 	}
 	for _, c := range t.Instance("data", "postgresql").Provided {
 		fmt.Printf("%s provisions %s for %s/%s\n", "data-postgresql", c.ID, c.Claimer.Namespace(), c.Claimer.Name)
@@ -1010,7 +1010,7 @@ func main() {
 
 	// What okdp-gitops compile does: the output, from the tree, but the
 	// projects whose output is kept, and why.
-	var kept []compiler.KeptProject
+	var kept []tree.Kept
 	_, err = store.Update(ctx, gitops.Commit{Subject: "okdp: compile"}, func(tx gitops.Tx) error {
 		var err error
 		kept, err = d.WriteCompiled(ctx, tx)
@@ -1107,22 +1107,22 @@ okdp: compile
   `AuthFromDir`, `AuthFromEnv`, `CatalogAuth`, `CatalogAuthFromEnv` and
   the function `CheckInsecureHTTP`.
 - `Compiler.Compile(ctx, reader)` compiles the tree a reader holds
-  ([the compile](specs/02_compile.md)): a `*compiler.Tree`
-  (`deploy.Build`, `compiler.CompileTree`), each
-  `compiler.TreeInstance` with its directory (`Name`), its project
+  ([the compile](specs/02_compile.md)): a `*tree.Tree`
+  (`deploy.Build`, `tree.Compile`), each
+  `tree.Instance` with its directory (`Name`), its project
   (`Namespace()`), its release (`Release()`), its package (`Definition`, `Provisions`), its outcome
   (`Outcome`: the result, why it is refused, its claims bound), the
   problem of the graph at its release (`GraphErr`), the claims bound to
   it as a provider (`Provided`, each with its `Claimer`, and what it
-  granted, `Granted`); or a `*compiler.LoadError`, the problems of a
+  granted, `Granted`); or a `*tree.LoadError`, the problems of a
   tree that does not load
-  (`Problems`, one per line in its message), from `compiler.Build`.
+  (`Problems`, one per line in its message), from `tree.Build`.
   `Deployments.Tree` compiles the tree as it is.
 - `Deployments.WriteCompiled(ctx, tx)` compiles the tree `tx` holds and
   writes its output, project by project
   ([problems](specs/02_compile.md#problems)), `deploy.TreeFiles`: the
   projects whose output it keeps as it was, each a
-  `compiler.KeptProject` (`Namespace`, `Problems`, `Instances`); an
+  `tree.Kept` (`Namespace`, `Problems`, `Instances`); an
   error, and
   nothing written, for a problem of the whole tree.
 - `Deployments.Apply(ctx, actor, edit)` commits a `treeedit.Edit`
@@ -1174,8 +1174,8 @@ okdp: compile
   what another instance uses), `*treeedit.ErrReleaseTaken` (a release
   another instance has), `*treeedit.CompileError` (an edit the compile
   refuses, its fault; a project's name, `Instance` empty, the compiler's
-  message alone); okdp-compiler's, `*compiler.LoadError` (every problem of
-  a tree); of `gitops`, `ErrNoForgejo`, `ErrConflict`, `ErrMoved`,
+  message alone); of `tree`, `*tree.LoadError` (every problem of a
+  tree); of `gitops`, `ErrNoForgejo`, `ErrConflict`, `ErrMoved`,
   `ErrSymlink`.
 
 ## Troubleshooting

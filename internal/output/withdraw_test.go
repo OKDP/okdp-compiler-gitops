@@ -1,6 +1,8 @@
 package output
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"testing"
 	"testing/fstest"
 
@@ -64,7 +66,7 @@ metadata:
 			if err := yaml.Unmarshal([]byte(tc.values), &given); err != nil {
 				t.Fatal(err)
 			}
-			ti := &compiler.TreeInstance{Name: "web", Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "demo", Release: "demo-web", Context: []compiler.ContextLayer{settings}, Values: []map[string]any{{"upstream": given}}}}
+			ti := &tree.Instance{Name: "web", Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "demo", Release: "demo-web", Context: []compiler.ContextLayer{settings}, Values: []map[string]any{{"upstream": given}}}}
 			files := map[string][]byte{
 				"projects/demo/instances/demo-web/Chart.yaml":           []byte("dependencies:\n  - {name: app, repository: https://charts.example.org, version: 1.0.0}\n"),
 				"projects/demo/instances/demo-web/instance.values.yaml": []byte(tc.values),

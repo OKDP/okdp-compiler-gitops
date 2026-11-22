@@ -1,6 +1,8 @@
 package gitops
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"errors"
 	"github.com/okdp/okdp-gitops/deploy"
@@ -8,7 +10,6 @@ import (
 	"log/slog"
 	"strings"
 
-	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-compiler/chart"
 	"github.com/okdp/okdp-gitops/treeedit"
 )
@@ -34,15 +35,15 @@ const ArgoCDRootPath = treeedit.ArgoCDRootPath
 // *deploy.ReleaseError each), or that depends on an instance of such a
 // project, keeps its output as it was, the files the output has of it,
 // and is returned, with why, in name order; the other projects' output
-// is written (each a compiler.KeptProject: Problems say why, an instance
+// is written (each a tree.Kept: Problems say why, an instance
 // each). A problem of the whole tree writes nothing, and is the
-// error: a *compiler.LoadError when the tree does not load (a platform file
+// error: a *tree.LoadError when the tree does not load (a platform file
 // that does not parse, a package no catalog has; a project's own load
 // problem refuses that project alone, kept like the others), a catalog
 // that cannot be read, a
 // release of the output a kept project keeps that a project written has
 // too, or that two kept outputs hold.
-func (d *Deployments) WriteCompiled(ctx context.Context, tx Tx) ([]compiler.KeptProject, error) {
+func (d *Deployments) WriteCompiled(ctx context.Context, tx Tx) ([]tree.Kept, error) {
 	if d.Compiler == nil {
 		return nil, errors.New("no compiler: the catalogs are unknown")
 	}

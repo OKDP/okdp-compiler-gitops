@@ -1,6 +1,8 @@
 package gitops
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"errors"
 	"github.com/okdp/okdp-gitops/deploy"
@@ -72,10 +74,10 @@ func compileAll(t *testing.T, d *Deployments) {
 
 // compile is okdp-gitops compile: the output of the projects that compile
 // written, in one commit; the projects kept.
-func compile(t *testing.T, d *Deployments) []compiler.KeptProject {
+func compile(t *testing.T, d *Deployments) []tree.Kept {
 	t.Helper()
 	ctx := context.Background()
-	var kept []compiler.KeptProject
+	var kept []tree.Kept
 	if _, err := d.Store.Update(ctx, Commit{Subject: "okdp: compile"}, func(tx Tx) error {
 		var err error
 		kept, err = d.WriteCompiled(ctx, tx)
@@ -175,14 +177,14 @@ func TestAnEditIsACommitCheckedByTheCompile(t *testing.T) {
 // claims bound to each provider, where each claim of an instance is bound.
 func TestTheTreeBindsTheClaims(t *testing.T) {
 	d, _ := testDeployments(t)
-	tree, err := d.Tree(context.Background())
+	built, err := d.Tree(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if problems := tree.Problems(); len(problems) > 0 || tree.Graph == nil {
+	if problems := built.Problems(); len(problems) > 0 || built.Graph == nil {
 		t.Fatalf("problems: %v", problems)
 	}
-	pg := tree.Instance("data", "postgresql")
+	pg := built.Instance("data", "postgresql")
 	if pg == nil || pg.Release() != "data-postgresql" || !slices.Equal(pg.Provisions(), []string{"database-server"}) {
 		t.Fatalf("data/postgresql: %+v", pg)
 	}
@@ -196,12 +198,12 @@ func TestTheTreeBindsTheClaims(t *testing.T) {
 	if got := strings.Join(ids, ", "); got != "demo.analytics by demo/reports, demo.app.database by demo/app" {
 		t.Errorf("provided: %s", got)
 	}
-	reports := tree.Instance("demo", "reports")
+	reports := built.Instance("demo", "reports")
 	if len(reports.Outcome.Claims) != 1 || reports.Outcome.Claims[0].ID != "demo.analytics" || reports.Outcome.Claims[0].Class != "large" ||
-		tree.Release(reports.Outcome.Claims[0].Namespace, reports.Outcome.Claims[0].Release) != pg {
+		built.Release(reports.Outcome.Claims[0].Namespace, reports.Outcome.Claims[0].Release) != pg {
 		t.Errorf("reports' claims: %+v", reports.Outcome.Claims)
 	}
-	if legacy := tree.Instance("demo", "legacy"); legacy.Err() != nil || len(legacy.Outcome.Claims) != 0 {
+	if legacy := built.Instance("demo", "legacy"); legacy.Err() != nil || len(legacy.Outcome.Claims) != 0 {
 		t.Errorf("legacy: %+v", legacy.Outcome)
 	}
 }
@@ -286,7 +288,7 @@ func TestAProblemOfTheTreeWritesNothing(t *testing.T) {
 			_, err := d.WriteCompiled(ctx, tx)
 			return err
 		})
-		var layout *compiler.LoadError
+		var layout *tree.LoadError
 		if c.err == "" && !errors.As(err, &layout) || c.err != "" && (err == nil || !strings.HasPrefix(err.Error(), c.err)) {
 			t.Errorf("%s: %v", c.name, err)
 		}
@@ -470,11 +472,11 @@ func TestAProjectOfAReservedNameIsNotCreated(t *testing.T) {
 	ctx := context.Background()
 	d, store := testDeployments(t)
 	if _, err := store.Update(ctx, Commit{Subject: "reserve"}, func(tx Tx) error {
-		raw, err := tx.ReadFile(compiler.PlatformFile)
+		raw, err := tx.ReadFile(tree.PlatformFile)
 		if err != nil {
 			return err
 		}
-		return tx.WriteFile(compiler.PlatformFile, append(raw, "    policy:\n      reserved: [openbao]\n"...))
+		return tx.WriteFile(tree.PlatformFile, append(raw, "    policy:\n      reserved: [openbao]\n"...))
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -527,7 +529,7 @@ func TestUpdateCatalogKeepsWhatItDoesNotTouch(t *testing.T) {
 // A menu that names a service of no catalog is refused as the compile
 // refuses it: by UpdateCatalog, a *treeedit.CompileError, nothing
 // committed; by the compile of a
-// tree that holds it, a *compiler.LoadError naming the service, nothing
+// tree that holds it, a *tree.LoadError naming the service, nothing
 // written.
 func TestAMenuOfAServiceInNoCatalogIsRefused(t *testing.T) {
 	ctx := context.Background()
@@ -565,7 +567,7 @@ func TestAMenuOfAServiceInNoCatalogIsRefused(t *testing.T) {
 		_, err := d.WriteCompiled(ctx, tx)
 		return err
 	})
-	var layout *compiler.LoadError
+	var layout *tree.LoadError
 	if !errors.As(err, &layout) || !strings.Contains(err.Error(), `catalogs.yaml: categories[2].services[0]: service "redis" is in no catalog`) {
 		t.Fatalf("WriteCompiled: %v", err)
 	}

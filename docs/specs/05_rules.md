@@ -31,7 +31,7 @@ instance's objects, and those of the final values, which the compile
 checks on what the `Finalize` of `internal/helmvalues` returns, after
 the checks against the charts and the render.
 
-A program that calls `compiler.Build` or `compiler.Compile` itself
+A program that calls `tree.Build` or `compiler.Compile` itself
 applies the rule sets it gives, their checks and hooks among them, but
 neither the upstream policy nor the render below.
 
@@ -40,7 +40,7 @@ the compile:
 
 | Where | How it gets the rule set |
 |---|---|
-| `deploy.Build` | `BuildOptions.Rules` (`deploy.BuildOptions` embeds `compiler.BuildOptions`); nil, `rules.Standard()` |
+| `deploy.Build` | `BuildOptions.Rules` (`deploy.BuildOptions` embeds `tree.BuildOptions`); nil, `rules.Standard()` |
 | `gitops.Compiler` | its `Rules` field, for its compiles and for `Deployments.CheckProjectName`; nil, `rules.Standard()` |
 | `deploy.ProjectAccess`, `treeedit.CheckProjectName` | their first argument; nil, `rules.Standard()` |
 | `internal/target`, `internal/target/argocd` | they write the groups `ProjectOf` read with the compile's `Inputs.Rules`, and read no rule set themselves |

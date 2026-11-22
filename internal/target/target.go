@@ -6,6 +6,8 @@
 package target
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"bytes"
 	"errors"
 	"fmt"
@@ -23,9 +25,9 @@ import (
 // Target: an output format: the files of compiled instances, path ->
 // content, every path under ProjectsDir, all a deployer reads of the
 // compiled tree. results are those of every instance of their namespaces,
-// g their graph (compiler.NewGraph).
+// g their graph (tree.NewGraph).
 type Target interface {
-	Files(results []*compiler.Result, g *compiler.Graph) (map[string][]byte, error)
+	Files(results []*compiler.Result, g *tree.Graph) (map[string][]byte, error)
 }
 
 // Keeper: a target that writes the platform's part of a project kept, one

@@ -1,6 +1,8 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"bytes"
 	"errors"
 	"fmt"
@@ -23,7 +25,7 @@ import (
 // an *ErrReleaseTaken, or a compile that fails. For a program that
 // answers before it writes, a form checked field by field: a write's
 // own *CompileError maps the same way.
-func Validate(r Reader, e Edit, compile func(Reader) (*compiler.Tree, error)) ([]compiler.FieldError, []Warning, error) {
+func Validate(r Reader, e Edit, compile func(Reader) (*tree.Tree, error)) ([]compiler.FieldError, []Warning, error) {
 	_, warnings, err := Apply(newOverlay(r), e, compile)
 	if ce, ok := errors.AsType[*CompileError](err); ok {
 		return compiler.FieldErrors(ce.Err), warnings, nil
@@ -38,7 +40,7 @@ func Validate(r Reader, e Edit, compile func(Reader) (*compiler.Tree, error)) ([
 // schema, its connection references resolved, its claims bound to their
 // providers, each at its parameter path, with exactly the compile's
 // rules.
-func ValidateInstance(r Reader, compile func(Reader) (*compiler.Tree, error), inst Instance) ([]compiler.FieldError, []Warning, error) {
+func ValidateInstance(r Reader, compile func(Reader) (*tree.Tree, error), inst Instance) ([]compiler.FieldError, []Warning, error) {
 	var e Edit
 	var err error
 	if r.Exists(inst.Dir()) {
@@ -62,7 +64,7 @@ func ValidateInstance(r Reader, compile func(Reader) (*compiler.Tree, error), in
 // claims.<name>. A project without instance binds none of its claims:
 // the tree checks them at their declaration (its class, its request,
 // its name), a problem of the tree that maps to claims.<name> too.
-func ValidateClaim(r Reader, compile func(Reader) (*compiler.Tree, error), project string, c compiler.ClaimSpec) ([]compiler.FieldError, []Warning, error) {
+func ValidateClaim(r Reader, compile func(Reader) (*tree.Tree, error), project string, c compiler.ClaimSpec) ([]compiler.FieldError, []Warning, error) {
 	entries, _, err := readEntries(r, ProjectFilePath(project), claimsKey)
 	if err != nil {
 		return nil, nil, err

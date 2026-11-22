@@ -1,35 +1,102 @@
 # The tree
 
-The tree of a platform's deployments is okdp-compiler's
-([repository layout](https://github.com/OKDP/okdp-compiler/blob/main/docs/01_usage.md#repository-layout)):
-okdp-gitops reads it as the compiler does, adds two files of its own
-beside it, and writes the output, `compiled/`. The paths below are paths
-of the tree; a [topology](04_topology.md) says which repository holds
-each part, and where in it. How the tree compiles is in
-[the compile](02_compile.md), the output in [the output](03_output.md).
+The tree of a platform's deployments: the platform, the catalog of
+packages, the projects and their instances. okdp-gitops reads it
+(package `tree`, `tree.Load`), each file the input of the instances it
+is for, compiles them together with okdp-compiler (`compiler.CompileAll`)
+and writes the output, `compiled/`. The packages and the contracts are
+the compiler's to read (`compiler.LoadCatalog`); the rest of the layout
+is okdp-gitops'. The paths below are paths of the tree; a
+[topology](04_topology.md) says which repository holds each part, and
+where in it. How the tree compiles is in [the compile](02_compile.md),
+the output in [the output](03_output.md).
 
 ```text
 platform.yaml                          the platform's part: the context of every instance, level 0
-catalogs.yaml                          okdp-gitops': the catalog repositories; the console's menu
+catalogs.yaml                          the catalog repositories; the console's menu
+contracts/<contract>.schema.json       a catalog's part: the contracts (Inputs.Contracts)
+catalog/<service>/<version>/           a catalog's part: a package (compiler.Definition)
 projects.yaml                          okdp-gitops', split topology only: the projects
-projects/<project>/                    a project's part: a namespace
-  project.yaml                         the context of its instances, level 1
-  instances/<instance>/                an instance: the release <project>-<instance>
+projects/<project>/                    a project's part: a namespace (Inputs.Namespace)
+  project.yaml                         the context of its instances, level 1; its description, its access
+  instances/<instance>/                an instance: the release <project>-<instance> (Inputs.Release)
     instance.yaml                      {service, version}; claimers, optional
-    config.yaml                        optional: its values
+    config.yaml                        optional: its values (Inputs.Values)
     connections.yaml                   optional, rare: its own connections, level 2
 compiled/                              the output's part: generated
 argocd/root.yaml                       the output's part, optional: Argo CD's entry point
 sources.yaml                           the output's part: generated, the revisions it is the compile of
 ```
 
-What a file of the compiler's holds, and how it is read, is the
-compiler's: [levels](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#levels),
-[connections](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#connections),
-[claims](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#claims).
-`compiler.LoadRepository` ignores what it does not know, `projects.yaml`
-among them; `catalogs.yaml` it checks
-([catalogs.yaml](#catalogsyaml)).
+The directory of a project is the namespace of its instances: nothing
+else names it, and the engines install there. Each file of the tree is
+read for the compile of the instances it is for:
+
+- `instance.yaml` holds `service` and `version`, the instance's package,
+  `catalog/<service>/<version>/`, and, optional, `claimers`, nothing
+  else: the namespaces whose instances may claim of it, a provider, from
+  another namespace, by naming it or through a class of their project's
+  (`claimers: [demo]`, `["*"]` for any; absent, its package's,
+  `provisions`, none by default), a class of `platform.yaml` needing none
+  ([providers](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#providers)).
+  Its `Chart.yaml` must have that `name` and `version`; a released
+  version directory is immutable: a change is a new version.
+- The context has a file per level
+  ([levels](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#levels)): 0 `platform.yaml`, the platform values
+  (`global.okdp`, the classes of the claims and their default among it,
+  the platform's secret store, the connections every instance may
+  reference); 1 `project.yaml`, what a project adds for its instances
+  (its settings under `global`, its classes beside the platform's, a
+  default class of a contract the platform sets none of, its
+  connections, its named claims, `claims: {<name>: {contract:
+  <contract>}}`, which its instances reference by name); 2
+  `connections.yaml`, the instance's own connections (`connections:
+  {<name>: {...}}`), and nothing else: `global` is the platform's or
+  the project's. A level adds values and changes none of a lower
+  level's. The named claims are a project's only: `platform.yaml`
+  declares none
+  ([connections](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#connections),
+  [claims](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#claims)).
+- `project.yaml` may describe its project, `description: <text>`, a
+  string: the project's own, which is no value of the context, and which
+  no instance receives (`tree.ProjectDescription`). It may give its
+  people their roles, `access: {<group>: viewer|editor|admin}`, the
+  identity provider's groups: absent, `okdp-project-<project>` is an
+  editor; `{}`, no group. No instance receives it: the targets write it
+  as the Argo CD roles of the project's AppProject and the RoleBindings
+  of its namespace ([the output](03_output.md)). Whoever writes
+  `project.yaml` sets it: in a repository of its own (the split
+  topology), its writers, the project's administrators.
+- `config.yaml` is the instance values: its parameters and upstream
+  values, no `connections`, no `claims`. An instance's directory holds
+  `instance.yaml`, `config.yaml` and `connections.yaml` only: another
+  entry, a `values.yaml`, a directory, a hidden file, would be read by
+  no compile, and is refused, each named.
+- `tree.Load` ignores what it does not know, `projects.yaml` among
+  them; `catalogs.yaml` it checks ([catalogs.yaml](#catalogsyaml)).
+
+The tree may be in several repositories (a `tree.Repository` each, of
+the role `tree.RoleTree`): a platform repository with `platform.yaml`, a
+repository per project with `projects/<project>/`, or all in one; and
+catalogs (`tree.RoleCatalog`), with `catalog/` and `contracts/` only. A
+catalog is trusted for its packages, not for the deployment: one that
+holds `platform.yaml` or `projects/`, a file or a directory, even
+empty, is refused, each path named, rather than read without them, so
+that its maintainers add no project, of a privileged name or not, nor
+the platform's values. Each repository needs its role: the zero value is
+refused. They make one tree, part by part, with no precedence, so that
+their order changes nothing:
+
+| Part | Across repositories |
+|---|---|
+| `platform.yaml`, `catalogs.yaml` | in one at most, each |
+| `catalog/<service>/` | in one: every version of a service from it |
+| `contracts/<contract>.schema.json` | in several, the same bytes in each: a catalog ships the contracts of its packages |
+| `projects/<project>/` | in one: the project's file and its instances |
+
+The problems of the tree's parts are listed before those of the
+catalog, each naming its repositories. An instance's package and
+contracts come from any repository.
 
 The tree holds regular files and directories only: a symbolic link is
 never followed, and a path of the tree that is, or goes through, one, to
@@ -45,7 +112,7 @@ A project, an instance, a connection and a named claim are named by a DNS
 label: lowercase letters, digits and `-`, 63 characters at most, starting
 and ending with a letter or a digit. The directory is the identity: the
 project is the namespace, the instance's release is
-`<project>-<instance>` (`compiler.ReleaseName`), 53 characters at most
+`<project>-<instance>` (`tree.ReleaseName`), 53 characters at most
 (Helm's). Two instances of two projects may not have the same release
 (project `a-b` instance `c`, project `a` instance `b-c`): their Flux
 HelmReleases share one namespace. A compile keeps both projects' output
@@ -70,7 +137,7 @@ The catalog repositories a compile fetches, each a Git repository at a
 ref, holding packages (`catalog/<service>/<version>/`) and their contracts
 (`contracts/<contract>.schema.json`), parts of the tree the compiler
 reads beside the deployments' (`catalog.Repositories`). A catalog is a
-repository of role catalog (`compiler.RoleCatalog`): a `platform.yaml` or
+repository of role catalog (`tree.RoleCatalog`): a `platform.yaml` or
 a `projects/` in it fails the compile, the deployments' parts are the
 topology's alone:
 
@@ -96,12 +163,12 @@ with its credentials, one of another host anonymously
 ([Git repositories](04_topology.md#git-repositories)). No file, or no
 repository in it: no catalog, and every instance refused.
 
-The file is okdp-compiler's to check
-([repository layout](https://github.com/OKDP/okdp-compiler/blob/main/docs/01_usage.md#repository-layout)),
-and okdp-gitops gives it to the compile with `platform.yaml`: read
-strictly, no other key at any level; each service of `categories` one
-of the catalogs', listed once, its `default` a version of it. A menu
-the compiler refuses is a problem of the whole tree, nothing written
+The tree checks it with `platform.yaml` (`tree.ParseCatalogs`,
+`tree.CheckMenu`): read strictly, no other key at any level (a former
+`serviceCatalog` wrapper, a service's `versions` or `repository` are
+refused); each service of `categories` one of the catalogs', listed
+once, its `default` a version of it. A menu refused is a problem of the
+whole tree, nothing written
 (`catalogs.yaml: categories[2].services[0]: service "redis" is in no
 catalog (catalog/redis/ of no repository)`); the control plane's edit
 of the file is refused the same way, its catalogs fetched
@@ -140,7 +207,7 @@ commits](04_topology.md#the-control-planes-commits)):
 
 | Operation | Writes |
 |---|---|
-| a project | `projects/<p>/project.yaml`; its description is its key `description`, first when new, the project's own: the compiler leaves it out of the context of the project's instances (`compiler.ProjectDescription`). In a split topology, the project's repository first (Forgejo, named after the projects url, without a workflow), then its entry of `projects.yaml` |
+| a project | `projects/<p>/project.yaml`; its description is its key `description`, first when new, the project's own: `tree.Load` leaves it out of the context of the project's instances (`tree.ProjectDescription`). In a split topology, the project's repository first (Forgejo, named after the projects url, without a workflow), then its entry of `projects.yaml` |
 | an instance | `instance.yaml` (`service`, `version`, and `claimers` as read: absent, `[]` or listed, `treeedit.Instance.Claimers`) and `config.yaml` (its values; none when it has none), each only when its content changes, so that a hand-written file keeps its comments |
 | a connection | the entry `connections.<name>` of `project.yaml`, or of `platform.yaml` for a platform connection, as okdp-compiler writes a `compiler.Connection`: `contract`, `description`, `secretRef`, then the contract's fields, sorted |
 | a named claim | the entry `claims.<name>` of `project.yaml`, a `compiler.ClaimSpec`: `contract`, `class` or `provider`, `request` |

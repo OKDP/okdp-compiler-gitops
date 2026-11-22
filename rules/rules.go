@@ -1,7 +1,7 @@
 // Package rules gives okdp-gitops' compiles their rule set: the
 // compiler's mandatory one with the security set of okdp-compiler-security
 // added (security.Rules), which together hold what a compile refuses of a
-// platform. A host gives it to its compiles (compiler.BuildOptions.Rules);
+// platform. A host gives it to its compiles (tree.BuildOptions.Rules);
 // deploy.Build does.
 package rules
 

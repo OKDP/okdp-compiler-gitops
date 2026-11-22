@@ -7,13 +7,14 @@ engine deploys, Flux or Argo CD. A commit of the tree deploys: the CI of
 the output repository runs `okdp-gitops compile` every 2 minutes and
 commits the output, which the engine reconciles.
 
-okdp-compiler compiles the tree and holds the mandatory rule set of an
-OKDP platform. okdp-gitops does everything around the compile: it adds
-the security set of okdp-compiler-security (upstream values, ingress
-hosts), checks the final values
-against the upstream charts, writes the targets (`helm`, `umbrella`,
-`flux`, `argocd`), reads and commits the Git repositories, and holds the
-edits of the tree the control plane commits.
+okdp-compiler compiles the instances, binds their claims and holds the
+mandatory rule set of an OKDP platform. okdp-gitops does everything
+around the compile: it reads the tree (package `tree`), adds the
+security set of okdp-compiler-security (upstream values, ingress hosts),
+checks the final values against the upstream charts, writes the targets
+(`helm`, `umbrella`, `flux`, `argocd`), reads and commits the Git
+repositories, and holds the edits of the tree the control plane
+commits.
 
 Three ways to use it:
 
@@ -136,6 +137,7 @@ output repository and read access to the sources
 | `catalog` | the catalog repositories, fetched from Git |
 | `deploy` | `Build`, the compile with the rules, the policy and the checks against the charts; the targets |
 | `rules` | `Standard`, the compiler's mandatory rule set with the security set added |
+| `tree` | the tree loaded (`Load`, the repositories and their roles, `catalogs.yaml`), compiled together (`Compile`, `Build`) and ordered (`Graph`); the projects kept (`Partial`) |
 | `treeedit` | the tree read, and its edits, each with its check |
 | `chartcache` | the chart cache: the upstream charts pulled from OCI registries and https repositories |
 
@@ -147,7 +149,7 @@ output repository and read access to the sources
 
 [docs/README.md](docs/README.md) indexes the documentation: usage, setting
 up a deployments repository, the tree, the compile, the output,
-topologies, the policy, architecture. The tree, the packages and how the
+topologies, the policy, architecture. The packages and how the
 instances compile are okdp-compiler's ([its
 documentation](https://github.com/OKDP/okdp-compiler/blob/main/docs/README.md)).
 

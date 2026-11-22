@@ -84,6 +84,8 @@
 package main
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"errors"
 	"flag"
@@ -93,7 +95,6 @@ import (
 	"strings"
 	"time"
 
-	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-gitops/chartcache"
 
 	"github.com/okdp/okdp-gitops/gitops"
@@ -225,7 +226,7 @@ func run(args []string) int {
 			fmt.Fprintf(os.Stderr, "okdp-gitops: %v: compiling again from the new revision\n", err)
 			continue
 		}
-		if layout, ok := errors.AsType[*compiler.LoadError](err); ok {
+		if layout, ok := errors.AsType[*tree.LoadError](err); ok {
 			fmt.Fprintf(os.Stderr, "okdp-gitops: %d problem(s):\n%s\n", len(layout.Problems), strings.Join(layout.Problems, "\n"))
 			return 1
 		}

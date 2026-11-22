@@ -1,6 +1,8 @@
 package argocd
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"strings"
 	"testing"
 
@@ -180,7 +182,7 @@ func TestFiles(t *testing.T) {
 	db := &compiler.Result{Namespace: "data", Release: "demo-db", Service: "db", Version: "1.0.0", Info: compiler.Info{Provides: []compiler.Output{{Name: "demo-db", Contract: "database"}}}, Privileged: true}
 	web := &compiler.Result{Namespace: "demo", Release: "demo-web", Service: "web", Version: "1.0.0", Dependencies: []compiler.Dependency{{Instance: "demo-db", Namespace: "data", Contract: "database", Field: "database", Output: "demo-db"}}}
 	results := []*compiler.Result{web, db}
-	g, err := compiler.NewGraph(results)
+	g, err := tree.NewGraph(results)
 	if err != nil {
 		t.Fatal(err)
 	}

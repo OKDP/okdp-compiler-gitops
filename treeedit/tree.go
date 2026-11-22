@@ -1,6 +1,8 @@
 package treeedit
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"errors"
 	"fmt"
 	"path"
@@ -11,7 +13,7 @@ import (
 // Reader: a tree as a caller holds it, a checkout, a Git tree, a store's
 // transaction, which the readers and the edits of this package read:
 // paths slash-separated, relative to the root of the tree
-// (compiler.PlatformFile, compiler.ProjectsDir...).
+// (tree.PlatformFile, tree.ProjectsDir...).
 type Reader interface {
 	// ReadFile returns the content of a file, or an error wrapping
 	// ErrNotFound.
@@ -42,9 +44,9 @@ var ErrNotFound = errors.New("not found in the deployments repository")
 // ErrExists: what an edit creates that the tree has already.
 var ErrExists = errors.New("already exists in the deployments repository")
 
-// The files of the tree beside compiler.PlatformFile that a program
+// The files of the tree beside tree.PlatformFile that a program
 // keeping the tree in Git reads: ProjectsFile, which the compile does not
-// read (compiler.LoadRepository ignores it), and CatalogsFile, which it
+// read (tree.Load ignores it), and CatalogsFile, which it
 // checks.
 const (
 	// CatalogsFile lists the catalog repositories a compile fetches,
@@ -52,23 +54,23 @@ const (
 	// console's menu of their services (categories, ReadCatalog), which
 	// the compile checks when a repository of the tree holds it
 	// (ParseCatalogs, CheckCatalogs).
-	CatalogsFile = compiler.CatalogsFile
+	CatalogsFile = tree.CatalogsFile
 	// ProjectsFile lists the projects of a tree whose projects each have
 	// a repository of their own: projects: [{name}] (ProjectsList).
 	ProjectsFile = "projects.yaml"
 )
 
 // ProjectDir is projects/<project>, a project of the tree.
-func ProjectDir(project string) string { return path.Join(compiler.ProjectsDir, project) }
+func ProjectDir(project string) string { return path.Join(tree.ProjectsDir, project) }
 
 // ProjectFilePath is projects/<project>/project.yaml.
 func ProjectFilePath(project string) string {
-	return path.Join(ProjectDir(project), compiler.ProjectFile)
+	return path.Join(ProjectDir(project), tree.ProjectFile)
 }
 
 // InstancesDir is projects/<project>/instances.
 func InstancesDir(project string) string {
-	return path.Join(ProjectDir(project), compiler.InstancesDir)
+	return path.Join(ProjectDir(project), tree.InstancesDir)
 }
 
 // InstanceDir is projects/<project>/instances/<instance>, an instance of

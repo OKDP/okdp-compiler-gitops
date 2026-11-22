@@ -1,8 +1,8 @@
 # The compile
 
 What okdp-gitops gives okdp-compiler and what it keeps of the answer. How
-an instance compiles, its context, its claims, what it publishes and the
-deployment graph are okdp-compiler's
+an instance compiles, its context, its claims and what it publishes are
+okdp-compiler's
 ([inputs and outputs](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md)).
 `gitops.Compiler.Compile` is the compile of the [tree](01_layout.md) a
 store holds, the same for `okdp-gitops compile` and for the control
@@ -22,25 +22,24 @@ plane.
 2. **The tree.** `platform.yaml` and every file under `projects/`, read
    from the parts of the topology at their paths: a file of 4 MiB at
    most, 64 MiB together, no symbolic link ([the tree](01_layout.md)).
-3. **The load.** `deploy.Build`, `compiler.Build` with the
+3. **The load.** `deploy.Build`, `tree.Build` with the
    compiler's mandatory [rule
    set](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md)
    and the [security
    set](https://github.com/OKDP/okdp-compiler-security/blob/main/docs/specs/04_rules.md),
    Helm's merge and the [policy](05_rules.md), of the tree and the
-   catalogs, each a `compiler.Repository`
-   (`compiler.LoadRepository`, then the compile):
+   catalogs, each a `tree.Repository`
+   (`tree.Load`, then the compile):
    every instance, its package, its context (`platform.yaml`,
    `project.yaml`, `connections.yaml`), its values (`config.yaml`), its
    release `<project>-<instance>` and namespace. Any problem of the load
    (a file that does not parse, a package or a version no catalog has, a
-   part in two repositories) is a `*compiler.LoadError`, okdp-compiler's,
-   listing every one, each naming its file: the tree
+   part in two repositories) is a `*tree.LoadError`, listing every one, each naming its file: the tree
    compiles no instance.
 4. **The charts.** With a chart source (`--charts`, the control plane's
    chart cache: `deploy.BuildOptions.Charts`), the upstream charts of
    every instance that loaded, those its `Chart.yaml` names, are fetched
-   before any instance compiles (`compiler.BuildOptions.Loaded`), each
+   before any instance compiles (`tree.BuildOptions.Loaded`), each
    once for the build (`deploy.Charts`): no fetch counts against an
    instance's timeout. okdp-compiler reads no upstream chart: the checks
    against them are okdp-gitops'. A chart that cannot be fetched is
@@ -48,7 +47,7 @@ plane.
    without the checks of that chart, the others checked, with a warning
    per chart and per instance key; the control plane does not keep such
    a tree, the next compile of the same files tries the charts again.
-5. **The compile.** `compiler.CompileTree` of every instance, each claim
+5. **The compile.** `tree.Compile` of every instance, each claim
    bound to its provider, of any namespace, each instance after those it
    depends on, with what they publish; each instance's CEL cost bounded
    (1 000 000, `gitops.DefaultCostLimit`). An instance refused is the
@@ -80,8 +79,9 @@ plane.
    release that does not provide what is referenced, a cycle) is the
    release's.
 
-The result is a `compiler.Tree`, okdp-compiler's (`compiler.CompileTree`):
-each instance (`compiler.TreeInstance`: its directory, its release, its
+The result is a `tree.Tree` (`tree.Compile`, `compiler.CompileAll` then
+the deployment graph, `tree.NewGraph`):
+each instance (`tree.Instance`: its directory, its release, its
 package, its outcome, the problem of the graph at its release, the claims
 bound to it as a provider), and the graph. `Tree.Problems` lists why each
 instance that does not deploy does not, as `<project>/<instance>: <why>`.
@@ -92,8 +92,7 @@ without compiling again.
 
 `okdp-gitops compile` writes the output project by project
 (`Deployments.WriteCompiled`, `deploy.TreeFiles`), the rule
-okdp-compiler's, `compiler.Partial`, the same as `okdp-compile
---partial`: a project whose instances all compile is written. A project
+`tree.Partial`, the same as `okdp-compile --partial`: a project whose instances all compile is written. A project
 of an instance refused, or of a problem of the graph of its own at its
 release (a cycle, a release that does not provide what is referenced),
 keeps its output as it was, the files the output repository has of it
@@ -119,7 +118,7 @@ compile that keeps a project leaves the record as it was); `kept, no
 revision recorded in sources.yaml` without one (a local directory, a
 repository new since). Its re-derived files are those the targets
 write of the project all the same, of today's settings
-(`compiler.KeptProject.Rederived`: its manifests, its instances'
+(`tree.Kept.Rederived`: its manifests, its instances'
 identity), the rest of its output kept.
 
 The engines keep deploying the last output of the kept projects, and

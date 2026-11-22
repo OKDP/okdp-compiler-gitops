@@ -1,6 +1,8 @@
 package gitops
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"errors"
 	"fmt"
@@ -75,9 +77,9 @@ func output(r treeedit.Reader) fs.FS { return treeedit.OutputFS(r) }
 // new revisions (Repositories.Update). The change
 // committed, and the revision that holds it.
 func (d *Deployments) Apply(ctx context.Context, actor Actor, edit treeedit.Edit) (*treeedit.Change, string, error) {
-	var compile func(treeedit.Reader) (*compiler.Tree, error)
+	var compile func(treeedit.Reader) (*tree.Tree, error)
 	if d.Compiler != nil {
-		compile = func(r treeedit.Reader) (*compiler.Tree, error) { return d.Compiler.Compile(ctx, r) }
+		compile = func(r treeedit.Reader) (*tree.Tree, error) { return d.Compiler.Compile(ctx, r) }
 	}
 	var change *treeedit.Change
 	rev, err := d.Store.Update(ctx, NewCommit(edit.Action, edit.Target, actor), func(tx Tx) error {
@@ -103,11 +105,11 @@ func (d *Deployments) apply(ctx context.Context, actor Actor, edit treeedit.Edit
 // Tree compiles the tree as it is (Compiler.Compile), for its readers: the
 // outcome of each instance, the claims bound to each provider, where each
 // claim of an instance is bound. Without a compiler, an empty tree.
-func (d *Deployments) Tree(ctx context.Context) (*compiler.Tree, error) {
+func (d *Deployments) Tree(ctx context.Context) (*tree.Tree, error) {
 	if d.Compiler == nil {
-		return &compiler.Tree{}, nil
+		return &tree.Tree{}, nil
 	}
-	return view(ctx, d, func(r treeedit.Reader) (*compiler.Tree, error) { return d.Compiler.Compile(ctx, r) })
+	return view(ctx, d, func(r treeedit.Reader) (*tree.Tree, error) { return d.Compiler.Compile(ctx, r) })
 }
 
 // --- Instances ---

@@ -1,6 +1,8 @@
 package target_test
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"bytes"
 	"context"
 	"errors"
@@ -66,7 +68,7 @@ var demoProject = map[string]any{"access": map[string]any{"okdp-project-demo": "
 // compiled: three instances, compiled with platform, and their graph:
 // demo-web, which waits for demo-db, in namespace demo; data-db alone in
 // data, privileged.
-func compiled(t *testing.T) ([]*compiler.Result, *compiler.Graph) {
+func compiled(t *testing.T) ([]*compiler.Result, *tree.Graph) {
 	t.Helper()
 	instance := func(pkg, release, namespace string, values map[string]any) compiler.Instance {
 		def, err := compiler.LoadDefinition(packages[pkg], rules.Standard())
@@ -90,7 +92,7 @@ func compiled(t *testing.T) ([]*compiler.Result, *compiler.Graph) {
 		}
 		results = append(results, o.Result)
 	}
-	g, err := compiler.NewGraph(results)
+	g, err := tree.NewGraph(results)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,13 +339,13 @@ func TestReleases(t *testing.T) {
 // reserves (compiler.EngineNamespaces), so that the compile refuses them
 // first.
 func TestOwnNamespaces(t *testing.T) {
-	g, err := compiler.NewGraph(nil)
+	g, err := tree.NewGraph(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for name, tc := range map[string]struct {
 		target interface {
-			Files([]*compiler.Result, *compiler.Graph) (map[string][]byte, error)
+			Files([]*compiler.Result, *tree.Graph) (map[string][]byte, error)
 		}
 		results []*compiler.Result
 		want    string

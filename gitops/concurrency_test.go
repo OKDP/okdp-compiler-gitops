@@ -1,6 +1,8 @@
 package gitops
 
 import (
+	"github.com/okdp/okdp-gitops/tree"
+
 	"context"
 	"errors"
 	"fmt"
@@ -69,7 +71,7 @@ func TestReadsAndWritesDoNotWaitOnASlowCompile(t *testing.T) {
 	var builds atomic.Int32
 	started, release, waiting := make(chan struct{}, 4), make(chan struct{}), make(chan struct{}, 4)
 	c := NewCompiler(&catalog.Loader{})
-	c.build = func(ctx context.Context, _ []compiler.Repository, _ deploy.BuildOptions) (*compiler.Tree, error) {
+	c.build = func(ctx context.Context, _ []tree.Repository, _ deploy.BuildOptions) (*tree.Tree, error) {
 		builds.Add(1)
 		started <- struct{}{}
 		select {
@@ -77,12 +79,12 @@ func TestReadsAndWritesDoNotWaitOnASlowCompile(t *testing.T) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-		return &compiler.Tree{}, nil
+		return &tree.Tree{}, nil
 	}
 	c.waiting = func() { waiting <- struct{}{} }
 	d := &Deployments{Store: s, Compiler: c}
 
-	var first, second *compiler.Tree
+	var first, second *tree.Tree
 	a := async(func() {
 		var err error
 		if first, err = d.Tree(ctx); err != nil {
@@ -474,7 +476,7 @@ func TestATreeCompiledWithoutTheChartChecksIsNotKept(t *testing.T) {
 	builds := 0
 	c := NewCompiler(&catalog.Loader{})
 	c.Charts = unreachable{}
-	c.build = func(ctx context.Context, _ []compiler.Repository, o deploy.BuildOptions) (*compiler.Tree, error) {
+	c.build = func(ctx context.Context, _ []tree.Repository, o deploy.BuildOptions) (*tree.Tree, error) {
 		builds++
 		if builds <= 2 {
 			// The compile names a chart the source cannot fetch.
@@ -482,12 +484,12 @@ func TestATreeCompiledWithoutTheChartChecksIsNotKept(t *testing.T) {
 				return nil, err
 			}
 		}
-		return &compiler.Tree{}, nil
+		return &tree.Tree{}, nil
 	}
 	d := &Deployments{Store: s, Compiler: c}
 	for i := 1; i <= 2; i++ {
-		if tree, err := d.Tree(ctx); err != nil || tree == nil || builds != i {
-			t.Fatalf("compile %d: %d builds, %v, %v: want a build each time", i, builds, tree, err)
+		if built, err := d.Tree(ctx); err != nil || built == nil || builds != i {
+			t.Fatalf("compile %d: %d builds, %v, %v: want a build each time", i, builds, built, err)
 		}
 	}
 	checked, err := d.Tree(ctx)
