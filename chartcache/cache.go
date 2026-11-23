@@ -87,13 +87,14 @@ func NewCache(dir string, puller Puller) *Cache {
 func ChartDir(ref chart.Ref) (string, error) { return chartdir.Of(ref) }
 
 // FS is the cache as the checks of a compile read it (Source), bounded
-// and with no symbolic link followed, as okdp-compile reads its --charts: a
-// link refused wherever it points, a file that is neither regular nor a
-// directory refused, a file over 4 MiB, or the files read of one chart
-// through one FS over 64 MiB together, refused (dirfs.NewCharts): each
-// chart has its own budget, so that the charts one project names do not
-// exhaust the others'. A cache directory that cannot be opened (none yet)
-// gives an FS whose every file fails with that error.
+// and with no symbolic link followed, as okdp-gitops-compile reads its
+// --charts: a link refused wherever it points, a file that is neither
+// regular nor a directory refused, a file over 4 MiB, or the files read
+// of one chart through one FS over 64 MiB together, refused
+// (dirfs.NewCharts): each chart has its own budget, so that the charts
+// one project names do not exhaust the others'. A cache directory that
+// cannot be opened (none yet) gives an FS whose every file fails with
+// that error.
 func (c *Cache) FS() fs.FS {
 	fsys, err := dirfs.NewCharts("the chart cache", c.Dir)
 	if err != nil {

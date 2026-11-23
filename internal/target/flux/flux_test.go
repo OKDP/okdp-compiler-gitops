@@ -209,7 +209,7 @@ func TestDeployerRole(t *testing.T) {
 // the platform names a provider, and their Kustomization, without a
 // namespace; a privileged project has no ServiceAccount.
 func TestProjectManifests(t *testing.T) {
-	store := &compiler.SecretStore{Name: "platform", ServiceAccount: "okdp-secrets", Provider: map[string]any{"vault": map[string]any{"server": "https://vault.example.org"}}}
+	store := &target.Store{Name: "platform", ServiceAccount: "okdp-secrets", Provider: map[string]any{"vault": map[string]any{"server": "https://vault.example.org"}}}
 	got, err := Target{}.ProjectManifests(target.Project{Namespace: "demo", SecretStore: store})
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +244,7 @@ func TestProjectManifests(t *testing.T) {
 // Kustomizations, each marked generated; the root's alone, without
 // results.
 func TestFiles(t *testing.T) {
-	db := &compiler.Result{Namespace: "data", Release: "demo-db", Service: "db", Version: "1.0.0", Info: compiler.Info{Provides: []compiler.Output{{Name: "demo-db", Contract: "database"}}}, Privileged: true}
+	db := &compiler.Result{Namespace: "data", Release: "demo-db", Service: "db", Version: "1.0.0", Info: compiler.Info{Provides: []compiler.Output{{Name: "demo-db", Contract: "database"}}}, Settings: map[string]any{"policy": map[string]any{"privileged": []any{"data"}}}}
 	web := &compiler.Result{Namespace: "demo", Release: "demo-web", Service: "web", Version: "1.0.0", Dependencies: []compiler.Dependency{{Instance: "demo-db", Namespace: "data", Contract: "database", Field: "database", Output: "demo-db"}}}
 	results := []*compiler.Result{web, db}
 	g, err := tree.NewGraph(results)

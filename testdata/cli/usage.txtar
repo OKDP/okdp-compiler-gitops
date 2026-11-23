@@ -1,18 +1,18 @@
 # --help and --version: status 0.
-status 0 okdp-compile --help
+status 0 okdp-gitops-compile --help
 ! stdout .
-stderr '^Usage of okdp-compile:$'
-status 0 okdp-compile --version
+stderr '^Usage of okdp-gitops-compile:$'
+status 0 okdp-gitops-compile --version
 stdout .
 ! stderr .
 
 # A usage error: status 2, the message and the usage on stderr.
-status 2 okdp-compile --nope
+status 2 okdp-gitops-compile --nope
 ! stdout .
 stderr '^flag provided but not defined: -nope$'
-stderr '^Usage of okdp-compile:$'
-status 2 okdp-compile -o
+stderr '^Usage of okdp-gitops-compile:$'
+status 2 okdp-gitops-compile -o
 stderr '^flag needs an argument: -o$'
-status 2 okdp-compile --repository a b
+status 2 okdp-gitops-compile --repository a b
 stderr '^unexpected argument "b": every input is a flag \(--repository before each directory\)$'
-stderr '^Usage of okdp-compile:$'
+stderr '^Usage of okdp-gitops-compile:$'

@@ -1,0 +1,57 @@
+# The rule set of okdp-gitops, added to the compiler's mandatory one after
+# the security set (rules.Standard): the names of what the targets write,
+# which no project may take, and the platform's settings the targets read.
+# The namespaces of the deployer engines and of the targets' own objects,
+# which no project may have, and the names of the objects written in every
+# project's namespace, which no release may take; the network policy, the
+# control plane's identity, the prefix of the groups in RoleBindings and
+# the API groups of the Flux Role, which the compiler never reads. It adds
+# rules and replaces none of the sets read before it.
+apiVersion: okdp-compiler/rules.v1
+name: gitops
+version: 1.0.0
+tables:
+  # The namespaces of the deployer engines and of the objects the targets
+  # write in them, which no project may have: a project's releases are
+  # installed with every verb of its namespace, and there they would rewrite
+  # the engine's sources, its Applications or HelmReleases, the other
+  # projects' identities.
+  engineNamespaces:
+    extensible: true
+    values: [argocd, flux-system, okdp-releases]
+  # The names of the objects the platform writes in the namespace of every
+  # project besides its instances': a release may not take one. The
+  # targets' (the Flux Role, the control plane's binding, the RoleBindings
+  # of the roles, the secret store's ServiceAccount), and the Secret of the
+  # initial access token of the security set's registration Jobs.
+  platformObjectNames:
+    extensible: true
+    values:
+      - okdp-project
+      - okdp-control-plane
+      - okdp-access-viewer
+      - okdp-access-editor
+      - okdp-access-admin
+      - okdp-secrets
+      - okdp-dcr-token
+  # The settings, paths under global.okdp, that name an object the platform
+  # writes in the namespace of every project: their values are taken as
+  # platformObjectNames are. The secret store and its ServiceAccount, and
+  # the Secret of the initial access token (the security set's).
+  platformObjectSettings:
+    extensible: true
+    values: [secrets.store, secrets.serviceAccount, oidc.dcr.tokenSecret]
+# The documents the compiler calls at its hooks, documents of vars and
+# errors, the first message refusing, for every project, privileged or
+# not: on the namespace of each instance, after the sets read before; on
+# its release.
+hooks:
+  namespace: [engineNamespace]
+  release: [platformObjectRelease]
+# The JSON schema the set adds to the platform's settings: network,
+# controlPlane, access.groupPrefix and policy.projectApiGroups.
+schemas:
+  platform: schemas/platform.schema.json
+documents:
+  engineNamespace: checks/engine-namespace.cel.yaml
+  platformObjectRelease: checks/release.cel.yaml

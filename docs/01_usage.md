@@ -1,7 +1,7 @@
 # Usage
 
 How to run okdp-gitops: the `okdp-gitops` binary, for a person and for
-the CI of the output, the `okdp-compile` binary, for local directories,
+the CI of the output, the `okdp-gitops-compile` binary, for local directories,
 the engines that deploy what they write, and the Go library, for the
 control plane. What it reads is specified in
 [the tree](specs/01_layout.md), how it compiles in
@@ -26,7 +26,7 @@ through it one of cel2yaml, both downloaded as any other module.
 
 ```bash
 make build            # bin/okdp-gitops
-make build-compile    # bin/okdp-compile
+make build-compile    # bin/okdp-gitops-compile
 make check            # what CI runs: gofmt, vet, lint, tidy, build, race tests
 make example          # rewrite the outputs of examples/ from the current compiler
 make fixtures         # regenerate testdata/helm (helm, python3, UMBRELLA_HELMS)
@@ -60,7 +60,7 @@ docker build --build-arg VERSION=1.2.3 -t okdp-gitops .
 
 okdp-compiler and cel2yaml are downloaded at the releases `go.mod`
 requires. The image holds `okdp-gitops` only:
-`okdp-compile` is built from a checkout, or taken from the archives of
+`okdp-gitops-compile` is built from a checkout, or taken from the archives of
 `.goreleaser.yaml` that each release publishes.
 
 Its base images are pinned by digest, the Go toolchain of `go.mod` and
@@ -90,8 +90,8 @@ okdp-gitops compile (--config FILE | --tree DIR --output DIR)
 okdp-gitops workflow --for output --config FILE
 ```
 
-`okdp-compile`, for local directories and one target, has a section of
-its own ([okdp-compile](#okdp-compile)).
+`okdp-gitops-compile`, for local directories and one target, has a section of
+its own ([okdp-gitops-compile](#okdp-gitops-compile)).
 
 Flags take one or two dashes, and a value as the next argument or after
 `=`; an argument that is not a flag is refused.
@@ -434,9 +434,9 @@ command's `$GITOPS_PRIVATE_CHART_HOSTS` allows at a private address
 from; an entry that is not a host, `host:port` nor `*.<domain>` is
 refused.
 
-## okdp-compile
+## okdp-gitops-compile
 
-`okdp-compile` compiles a tree from local directories and writes the
+`okdp-gitops-compile` compiles a tree from local directories and writes the
 files of one target. It reads no Git repository and commits nothing:
 a catalog's CI, a person writing a package, a script. It compiles as
 `okdp-gitops compile` does (`deploy.Build`: okdp-compiler's [rule
@@ -448,19 +448,19 @@ Helm's merge of the final values, the upstream policy and the render
 those of `rules.Standard()`.
 
 ```text
-okdp-compile --repository <dir> [--repository <dir>]...
-             [--catalog <dir>]... -o <dir>
-             [--target helm|umbrella|flux|argocd] [--path-prefix <path>]
-             [--flux-source <namespace>/<name>]
-             [--repo-url <url>] [--revision <revision>]
-             [--cost-limit <n>] [--instance-timeout <duration>]
-             [--timeout <duration>] [--force]
-             [--report <file>|-] [--partial] [--allow-plain-secrets]
-okdp-compile --check [--charts <dir>] [--report <file>|-]
-             [--allow-plain-secrets]
-             --repository <dir> [--repository <dir>]...
-             [--catalog <dir>]...
-okdp-compile --version
+okdp-gitops-compile --repository <dir> [--repository <dir>]...
+                    [--catalog <dir>]... -o <dir>
+                    [--target helm|umbrella|flux|argocd] [--path-prefix <path>]
+                    [--flux-source <namespace>/<name>]
+                    [--repo-url <url>] [--revision <revision>]
+                    [--cost-limit <n>] [--instance-timeout <duration>]
+                    [--timeout <duration>] [--force]
+                    [--report <file>|-] [--partial] [--allow-plain-secrets]
+okdp-gitops-compile --check [--charts <dir>] [--report <file>|-]
+                    [--allow-plain-secrets]
+                    --repository <dir> [--repository <dir>]...
+                    [--catalog <dir>]...
+okdp-gitops-compile --version
 ```
 
 | Flag | Default | |
@@ -478,8 +478,8 @@ okdp-compile --version
 | `--cost-limit` | `1000000` | the CEL cost each instance's expressions may use together, past which the instance is refused; `0`, no limit |
 | `--instance-timeout` | `1m` | how long one instance's compile may take, a Go duration: past it that instance is refused, the others compiled, and `--partial` keeps its project; `0`, no limit |
 | `--timeout` | `10m` | how long the compile may take, every instance together: past it, nothing is written; `0`, no limit |
-| `--report` | | a JSON report of the compile, to the file, or to stdout for `-`, even with `--check` and when the compile fails ([`--report`](#okdp-compile---report)); refused inside a `--repository` or `<output>/projects/` |
-| `--partial` | | write the projects whose instances all compile, and keep what the output holds of the others', status 1 all the same ([`--partial`](#okdp-compile---partial)); refused with `--check` |
+| `--report` | | a JSON report of the compile, to the file, or to stdout for `-`, even with `--check` and when the compile fails ([`--report`](#okdp-gitops-compile---report)); refused inside a `--repository` or `<output>/projects/` |
+| `--partial` | | write the projects whose instances all compile, and keep what the output holds of the others', status 1 all the same ([`--partial`](#okdp-gitops-compile---partial)); refused with `--check` |
 | `--force` | | write into an `<output>/projects/` that holds files but no `projects/.okdp-compile`, removing from it every file it does not write; refused with `--check` |
 | `--allow-plain-secrets` | | accept credentials written in clear: a `provides` `secret` without `generate`, a Secret of the `objects` section with `data` or `stringData`; without it they fail the compile, the output being committed |
 | `--version` | | print the version and exit |
@@ -498,7 +498,7 @@ directory, a file over 4 MiB, and a new file once those read of one
 directory pass 64 MiB together. The chart cache is bounded by chart: the
 files of each chart's directory 64 MiB together.
 
-### okdp-compile --repository
+### okdp-gitops-compile --repository
 
 Every instance of a tree compiled together, each read from
 `projects/<namespace>/instances/<instance>/`, the release
@@ -510,7 +510,7 @@ overrides. In order:
    level may among them ([the levels](specs/01_layout.md#the-levels));
    a project's own (its `project.yaml`, an instance's files, the
    version it names) refuses that project, not the tree
-   ([`--partial`](#okdp-compile---partial));
+   ([`--partial`](#okdp-gitops-compile---partial));
 2. the instances, each claim bound to its provider, checked against the
    chart cache with `--check --charts`: each binding on stderr,
    `<namespace>/<release>: <field>: claim <id> (<contract>) bound to
@@ -527,7 +527,7 @@ Any problem exits with status 1, nothing written. `--check` stops before
 writing, and prints no dependency.
 
 ```console
-$ bin/okdp-compile --repository examples/03_full/input/db -o out/tree
+$ bin/okdp-gitops-compile --repository examples/03_full/input/db -o out/tree
 demo/demo-workspace: catalogs[1].database: claim demo.marketing (database) bound to demo/demo-db, the default class standard
 demo/demo-workspace: database: claim demo.workspace.database (database) bound to demo/demo-db, the default class standard
 demo/demo-workspace: depends on demo-db (database demo.marketing, catalogs[1].database)
@@ -541,7 +541,7 @@ okdp-compiler's own examples show a package and its values, but a
 deployer needs the namespace, which here is the directory of the
 project.
 
-### okdp-compile --output
+### okdp-gitops-compile --output
 
 The default target, `helm`, writes the values of each instance and no
 chart: the package of the catalog is installed as it is.
@@ -562,12 +562,12 @@ package's charts and of `okdp-objects`:
 | `okdp.info.yaml` | as above |
 
 ```console
-$ bin/okdp-compile --repository examples/02_advanced/input/db -o out
+$ bin/okdp-gitops-compile --repository examples/02_advanced/input/db -o out
 demo/demo-webapp: database: claim demo.webapp.database (database) bound to demo/demo-db, the default class standard
 demo/demo-webapp: depends on demo-db (database demo.webapp.database, database)
 $ ls out/projects/demo/instances/demo-webapp
 okdp.info.yaml  okdp-objects.values.yaml  values.yaml
-$ bin/okdp-compile --repository examples/02_advanced/input/db -o umbrella --target umbrella 2>/dev/null
+$ bin/okdp-gitops-compile --repository examples/02_advanced/input/db -o umbrella --target umbrella 2>/dev/null
 $ cat umbrella/projects/demo/instances/demo-webapp/Chart.yaml
 apiVersion: v2
 name: webapp
@@ -594,12 +594,12 @@ is read, removed or checked.
 
 The command marks the directory it owns, `projects/.okdp-compile`, and
 refuses a `projects/` that holds files without it, before anything is
-compiled: `<output>/projects/ exists and was not written by okdp-compile
+compiled: `<output>/projects/ exists and was not written by okdp-gitops-compile
 (no projects/.okdp-compile): choose an empty output, or remove it
 yourself`. `--force` writes over it. A `projects/` that is a symbolic
 link fails, even with `--force`.
 
-### okdp-compile --check
+### okdp-gitops-compile --check
 
 `--check` compiles as `-o` does and writes nothing; it takes no `-o`.
 With `--charts <dir>` (`$OKDP_CHARTS` by default), each upstream chart
@@ -628,13 +628,13 @@ its instances. In `bad`, a copy of its tree whose workspace's
 `config.yaml` adds `{name: bad-name, value: x}` to `upstream.api.env`:
 
 ```console
-$ bin/okdp-compile --check --charts examples/03_full/.charts --repository bad
+$ bin/okdp-gitops-compile --check --charts examples/03_full/.charts --repository bad
 error: demo/demo-workspace: compiled values don't meet the specifications of the schema(s) in the following chart(s):
 api (workspace-3.2.0):
 - at '/env/26/name': 'bad-name' does not match pattern '^[A-Za-z_][A-Za-z0-9_]*$'
 ```
 
-### okdp-compile --report
+### okdp-gitops-compile --report
 
 `--report <file>` writes what the compile gives as JSON, for a CI job or
 a bot that comments a pull request: `-` writes it to stdout, which the
@@ -660,12 +660,12 @@ when the compile fails (the exit status is the same), but not when
 The lists are empty, never `null`.
 
 ```console
-$ bin/okdp-compile --check --report - --repository examples/02_advanced/input/db 2>/dev/null | jq -c '.instances[] | [.release, .status, .claims[].id]'
+$ bin/okdp-gitops-compile --check --report - --repository examples/02_advanced/input/db 2>/dev/null | jq -c '.instances[] | [.release, .status, .claims[].id]'
 ["demo-db","compiled"]
 ["demo-webapp","compiled","demo.webapp.database"]
 ```
 
-### okdp-compile --partial
+### okdp-gitops-compile --partial
 
 Without it, one refused instance writes nothing. With `--partial`, a
 refusal fails its project, not the tree: the projects whose instances
@@ -701,7 +701,7 @@ writes nothing, as without `--partial`: an option, a repository, the
 target's files, a release a project kept holds and a project written has
 too, `--timeout`.
 
-### Exit status of okdp-compile
+### Exit status of okdp-gitops-compile
 
 | Status | When |
 |---|---|
@@ -774,7 +774,7 @@ The repositories of the parts checked out side by side, any error
 failing the job, the output committed and checked against the commit:
 
 ```bash
-bin/okdp-compile --repository platform --catalog catalog --repository projects \
+bin/okdp-gitops-compile --repository platform --catalog catalog --repository projects \
   -o compiled --target flux || exit 1
 test -z "$(git status --porcelain compiled/)" || { git status --short compiled/; exit 1; }
 ```
@@ -925,8 +925,8 @@ applies an edit and its check, and commits the change.
 | `gitops` | the stores: `Store` (`View`, a `treeedit.Reader`; `Update`, a `Tx`, a `treeedit.Writer`), `GitStore` (a Git remote, go-git), `MemoryStore`, `Repositories` (the parts of a `Topology`); `Credentials`: the credentials of the repositories, the catalogs and the Forgejo API, the `http://` hosts allowed; `Compiler`: the compile of the tree a store holds (`SkipRender`: no render of the charts, for a long-running process; [the render](specs/05_rules.md#the-render)); `Deployments`: the edits of `treeedit` committed (`Apply`, a method per edit), the reads of the tree and of the output through `treeedit`, the output (`WriteCompiled`); `ForgejoClient`; the workflow of the output (`OutputWorkflow`) |
 | `catalog` | the catalogs of `catalogs.yaml` (each a `treeedit.CatalogRepository`): `Loader` (Git repositories at their ref, local directories), `Catalogs`, indexed by okdp-compiler (`Index`, a `compiler.Catalog`: services, versions, packages, contracts) |
 | `deploy` | `Build(ctx, repos, BuildOptions)`: `tree.Build` with the compiler's mandatory rule set, Helm's merge and the policy, each unless the caller gives another, the final values checked against the upstream charts of `BuildOptions.Charts` (`SkipRender`: the same `Finalize`, the charts not rendered); `ChartSource` (a `chartcache.Cache`, or `StaticCharts(fsys)`, a directory filled already), `NewCharts(src)`, the `Charts` of one build (`Failures`, `FS`); `CoalesceValues(values, defaults)`: values over a chart's defaults as Helm coalesces them; the targets (`Helm`, `Umbrella`, `Flux`, `ArgoCD`, each `Files(results, graph, groups)`, the roles of each project's groups as the tree gives them, `GroupsOf`, `ProjectGroups`); `TreeFiles(t, targets, previous, charts)`: the files of a tree; `Write`: those of one compile for a plain `helm install`; `ReadCompiled`, `ReadPublished`, `ReadArgoRoot`, `ProjectAccess`, `CheckReleases` |
-| `rules` | `Standard`: the compiler's mandatory rule set with the security set added ([the policy](specs/05_rules.md)) |
-| `tree` | the tree loaded and compiled: `Load`, `LoadProjects`, `LoadCatalog`, `Build(ctx, repos, BuildOptions)`, `Compile`, `Partial`, `Regressions`, `NewGraph`; `Tree`, `Instance`, `Kept`, `LoadError`; `Repository`, `RoleTree`, `RoleCatalog`, the names of the layout (`PlatformFile`, `ProjectsDir`...), `ReleaseName`, `ParseInstance`, `ParseCatalogs`, `CheckMenu`; what each file may set ([the levels](specs/01_layout.md#the-levels), `BuildOptions.CheckGlobals`), `ProjectAccess`, `DefaultProjectGroup`, `AccessKey` |
+| `rules` | `Standard`: the compiler's mandatory rule set with the security set and okdp-gitops' set added, `FS` the latter's files, `EngineNamespaces` its table of the engines' namespaces ([the policy](specs/05_rules.md)) |
+| `tree` | the tree loaded and compiled: `Load`, `LoadProjects`, `LoadCatalog`, `Build(ctx, repos, BuildOptions)`, `Compile`, `Partial`, `Regressions`, `NewGraph`; `Tree`, `Instance`, `Kept`, `LoadError`; `Repository`, `RoleTree`, `RoleCatalog`, the names of the layout (`PlatformFile`, `ProjectsDir`...), `ReleaseName`, `ParseInstance`, `ParseCatalogs`, `CheckMenu`; what each file may set ([the levels](specs/01_layout.md#the-levels), `BuildOptions.CheckGlobals`), `ProjectAccess`, `DefaultProjectGroup`, `AccessKey`, `GroupsSettings`, `Groups` |
 | `treeedit` | the tree read, its edits and their checks: `Reader`, `Writer`, `Apply`, `Check.Verify`, `ReadSources`, `OutputTargets`, `OutputFS`, `WriteOutput` |
 | `chartcache` | the chart cache of the checks, a `deploy.ChartSource` (`Get` pulls a chart it lacks, `FS` gives them): `NewCache`, `NewRepositoryPuller`, set as `Compiler.Charts` |
 
@@ -1196,7 +1196,7 @@ okdp-gitops' own:
 | `service "webapp" is in the catalog of no repository` | `instance.yaml` names a service no catalog has, or `catalogs.yaml` names no repository | fix `service`; name the catalogs ([catalogs.yaml](specs/01_layout.md#catalogsyaml)) |
 | `version "2.0.0" of service "webapp" is not in test-charts/catalog/webapp` | a version the catalog does not have, at its ref | fix `version`; check the catalog's `ref`, or `--catalog` |
 | `compiled values don't meet the specifications of the schema(s) in the following chart(s):` then `app (app-1.8.0):` and `- at '/database': got object, want string` | `--charts`: the values, over the chart's defaults, violate its `values.schema.json` | fix the instance's parameters or upstream values; else the package |
-| `<key>: chart app-1.8.0 is not in the chart cache: helm pull ... --untar -d <chart cache>/...` | `okdp-compile --check --charts`: the cache, read as it is, lacks the chart | run the command, `<chart cache>` the directory of `--charts` |
+| `<key>: chart app-1.8.0 is not in the chart cache: helm pull ... --untar -d <chart cache>/...` | `okdp-gitops-compile --check --charts`: the cache, read as it is, lacks the chart | run the command, `<chart cache>` the directory of `--charts` |
 | `upstream.<key>.<path>: appended to the package's list, not to the default list of ..., which Helm replaces: ...` (warning) | `--charts`: an instance appended to a list whose final list lacks items of the chart's default list | restate them in the package's values, as the warning says |
 | `A chart could not be fetched: ...`, `Compiled without the checks against this chart: ...` (warnings); `upstream.<key>: the chart ... could not be fetched` | `--charts`: a chart that cannot be pulled anonymously, a private repository, no network; a plain-http registry not in `$GITOPS_INSECURE_CHART_HOSTS` | the instance's other charts compile; a project that is not privileged giving it upstream values is refused; put the chart in the cache by hand (`helm pull -d <dir>/<repository>/<chart>-<version>/`: the `.tgz` beside the chart, unpacked with `--untar`) |
 | `okdp-gitops: catalog platform-charts (https://git.example.org/okdp/platform-charts.git@main): fetching the catalog: authentication required` | a catalog that cannot be fetched: its URL, its credentials (those of `$GITOPS_CREDENTIALS_DIR`, else `$GITOPS_TOKEN`, on the platform repository's host only) | fix the URL or the credentials, or `--catalog platform-charts=<dir>` |

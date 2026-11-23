@@ -11,7 +11,7 @@ A target (`deploy.Target`) writes compiled instances for a deployer,
 given their results and their deployment graph: the files, path ->
 content, every one under `projects/`.
 
-| `okdp-compile --target` | Target | Each instance's files | Besides | Options |
+| `okdp-gitops-compile --target` | Target | Each instance's files | Besides | Options |
 |---|---|---|---|---|
 | `helm` (the default) | `deploy.Helm` | `values.yaml`, `okdp-objects.values.yaml`, `okdp.info.yaml`: values, no chart | none | none |
 | `umbrella` | `deploy.Umbrella` | `Chart.yaml`, `instance.values.yaml`, `okdp.info.yaml`: one chart, a release of the package's charts and `okdp-objects` | none | none |

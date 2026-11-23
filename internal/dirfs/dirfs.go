@@ -1,7 +1,7 @@
 // Package dirfs: the files under a directory as an fs.FS, bounded and
-// with no symbolic link followed: what okdp-compile reads of a repository,
-// the chart cache or the output, and the chart cache of package
-// chartcache gives a compile (Cache.FS).
+// with no symbolic link followed: what okdp-gitops-compile reads of a
+// repository, the chart cache or the output, and the chart cache of
+// package chartcache gives a compile (Cache.FS).
 package dirfs
 
 import (

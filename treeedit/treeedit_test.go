@@ -4,6 +4,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
+
+	compiler "github.com/okdp/okdp-compiler"
 )
 
 // TestDescriptionKeepsTheRest: the description is a key of project.yaml,
@@ -104,6 +108,28 @@ func TestEditEntry(t *testing.T) {
 	}
 	if _, err := EditEntry([]byte("claims: [a]\n"), "p.yaml", "claims", "x", map[string]any{}); err == nil || err.Error() != "p.yaml: claims is not a mapping: fix it in Git" {
 		t.Errorf("a list: %v", err)
+	}
+}
+
+// TestConnectionEntry: a connection as written, its own keys first, then
+// the contract's fields, sorted, one of its own names among them left
+// out; compiler.ParseConnection reads it back.
+func TestConnectionEntry(t *testing.T) {
+	c := compiler.Connection{Name: "lake", Contract: "database", Description: "The lake", Values: map[string]any{"port": 5432, "host": "h"}, RemoteKey: "demo/lake"}
+	got, err := EditEntry(nil, "p.yaml", "connections", "lake", connectionEntry(c))
+	if want := "connections:\n  lake:\n    contract: database\n    description: The lake\n    secretRef:\n      remoteKey: demo/lake\n    host: h\n    port: 5432\n"; err != nil || string(got) != want {
+		t.Errorf("got %q %v, want %q", got, err, want)
+	}
+	var doc map[string]map[string]any
+	if err := yaml.Unmarshal(got, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if back := compiler.ParseConnection("lake", doc["connections"]["lake"]); !reflect.DeepEqual(back, c) {
+		t.Errorf("read back: %+v, want %+v", back, c)
+	}
+	got, err = EditEntry(nil, "p.yaml", "connections", "s", connectionEntry(compiler.Connection{Contract: "s3", SecretRef: "creds", Values: map[string]any{"bucket": "b", "contract": "other"}}))
+	if want := "connections:\n  s:\n    contract: s3\n    secretRef:\n      name: creds\n    bucket: b\n"; err != nil || string(got) != want {
+		t.Errorf("got %q %v, want %q", got, err, want)
 	}
 }
 

@@ -4,12 +4,12 @@
 # version range, which would let the deployer render another chart than
 # the one the values were checked against. The instance fails, nothing
 # written.
-status 1 okdp-compile --repository $WORK/http -o $WORK/files
+status 1 okdp-gitops-compile --repository $WORK/http -o $WORK/files
 ! stdout .
 stderr '^error: .*/instance.yaml: the package .*http/catalog/web/1.0.0: Chart.yaml: dependencies\[0\].repository "http://charts.example.org": http://, the chart fetched in clear: the URL of a chart repository \(https://... or oci://...\)$'
 ! exists $WORK/files
 
-status 1 okdp-compile --repository $WORK/range -o $WORK/files
+status 1 okdp-gitops-compile --repository $WORK/range -o $WORK/files
 ! stdout .
 stderr '^error: .*/instance.yaml: the package .*range/catalog/web/1.0.0: Chart.yaml: dependencies\[0\].version "~1.0": a pinned chart version \(1.2.3\), not a range$'
 ! exists $WORK/files

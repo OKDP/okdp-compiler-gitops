@@ -33,13 +33,13 @@ type Refused struct {
 	Problems  []string // why, each naming its repository and path
 	Errs      []error  // the error behind each problem, in the same order
 	// Inputs are the project's (Namespace, Contracts, Values: the
-	// platform's layer and the project's, Settings: its groups,
+	// platform's layer and the project's; Settings: its groups,
 	// GroupsSettings).
 	Inputs compiler.Inputs
 	// Own reports whether Inputs holds the project's own layer and its
 	// groups. It is false when its project.yaml cannot be read or sets
 	// what its level may not: Inputs then holds the platform's layer
-	// alone, and no group.
+	// alone, and no group (Groups gives nil).
 	Own bool
 }
 

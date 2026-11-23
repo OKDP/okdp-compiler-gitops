@@ -19,6 +19,7 @@ import (
 	"slices"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/access"
 	"github.com/okdp/okdp-gitops/internal/target"
 	"github.com/okdp/okdp-gitops/internal/target/helm"
 )
@@ -88,7 +89,11 @@ func (t Target) Files(results []*compiler.Result, g *tree.Graph, groups target.P
 		wave := g.Wave(tree.GraphNode{Namespace: res.Namespace, Release: res.Release})
 		files[path.Join(dir, ApplicationFile)] = append([]byte(target.Generated), t.Application(res.Namespace, res.Release, path.Join(t.PathPrefix, dir), wave)...)
 	}
-	for _, p := range target.Projects(results, groups) {
+	projects, err := target.Projects(results, groups)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range projects {
 		manifests, err := t.ProjectManifests(p)
 		if err != nil {
 			return nil, err
@@ -202,15 +207,15 @@ func (t Target) AppProject(p target.Project) []byte {
 // deletes them and overrides their sources and parameters (a sync of
 // other values than the output's). Argo CD's role:readonly or
 // role:admin, the platform's, are the bootstrap's.
-func Policies(r compiler.AccessRole) [][2]string {
+func Policies(r access.Role) [][2]string {
 	viewer := [][2]string{{"applications", "get"}}
 	editor := append(slices.Clone(viewer), [2]string{"applications", "sync"}, [2]string{"applications", "action/*"}, [2]string{"logs", "get"})
 	switch r {
-	case compiler.AccessViewer:
+	case access.Viewer:
 		return viewer
-	case compiler.AccessEditor:
+	case access.Editor:
 		return editor
-	case compiler.AccessAdmin:
+	case access.Admin:
 		return append(editor, [2]string{"applications", "delete"}, [2]string{"applications", "override"})
 	}
 	panic("argocd: no policies for the role " + string(r))

@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/policy"
 )
 
 // The statuses of an instance in a report (instanceReport.Status).
@@ -40,7 +41,8 @@ type report struct {
 }
 
 // instanceReport: an instance of a report. Service and Version are its
-// package's; Privileged its result's (false when refused); Error, its
+// package's; Privileged whether its result's settings make its namespace
+// one of the platform's own (policy.Privileged; false when refused); Error, its
 // refusal, "" when none; the lists empty, never null.
 type instanceReport struct {
 	Namespace    string                `json:"namespace"`
@@ -100,7 +102,7 @@ func (r *report) add(in compiler.Instance, out compiler.Outcome) {
 	}
 	res := out.Result
 	ir.Status = statusCompiled
-	ir.Service, ir.Version, ir.Privileged = res.Service, res.Version, res.Privileged
+	ir.Service, ir.Version, ir.Privileged = res.Service, res.Version, policy.Privileged(res.Settings, res.Namespace)
 	ir.Warnings = append(ir.Warnings, res.Warnings...)
 	ir.Dependencies = append(ir.Dependencies, res.Dependencies...)
 	for _, key := range slices.Sorted(maps.Keys(res.Charts)) {

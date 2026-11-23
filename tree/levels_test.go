@@ -2,6 +2,7 @@ package tree
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"maps"
 	"reflect"
@@ -11,6 +12,7 @@ import (
 	"testing/fstest"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/access"
 	"github.com/okdp/okdp-compiler-security/policy"
 	"github.com/okdp/okdp-compiler/value"
 
@@ -111,8 +113,8 @@ func TestLevels(t *testing.T) {
 	_, err := loadOne(t, levelsTree("", "global: {okdp: null}\n", "", ""))
 	wantErr(t, err, "db/projects/demo/project.yaml: global.okdp: a platform setting, of level 0 only (platform.yaml)")
 	// The layers in order, the platform's, the project's, the instance's
-	// connections and its values: a project's global reaches every chart,
-	// the instance's values win.
+	// connections and its values (its project's groups are its settings):
+	// a project's global reaches every chart, the instance's values win.
 	inst, err := loadOne(t, levelsTree(levelsPlatform, "global: {storageClass: fast}\nreplicas: 3\n", "connections: {own: {contract: database, host: b}}\n", "replicas: 2\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -180,6 +182,28 @@ func TestLevelsAdd(t *testing.T) {
 	other, _ := base.add(at(1, "q", M{"global": M{"storageClass": "slow"}}))
 	if value.Dig(with.byLevel[1].values, "global.storageClass") != "fast" || value.Dig(other.byLevel[1].values, "global.storageClass") != "slow" {
 		t.Error("two projects share their level")
+	}
+}
+
+// TestOverlap: the first path, in path order, where a layer sets what
+// base sets; maps merge but those wholePaths gives whole.
+func TestOverlap(t *testing.T) {
+	base := M{"a": M{"b": 1.0, "c": M{"d": 1.0}}, "connections": M{"x": M{"host": "h"}}}
+	for layer, want := range map[string]string{
+		`{"a": {"e": 1}}`:                       "",
+		`{"a": {"c": {"e": 1}}}`:                "",
+		`{"a": {"c": {"d": 2}, "b": 2}}`:        "a.b",
+		`{"a": {"c": 1}}`:                       "a.c",
+		`{"connections": {"x": {"port": 1}}}`:   "connections.x",
+		`{"connections": {"y": {"host": "h"}}}`: "",
+	} {
+		var l M
+		if err := json.Unmarshal([]byte(layer), &l); err != nil {
+			t.Fatal(err)
+		}
+		if got := overlap(base, l, nil); got != want {
+			t.Errorf("%s: got %q, want %q", layer, got, want)
+		}
 	}
 }
 
@@ -336,22 +360,22 @@ func TestRemoteKeys(t *testing.T) {
 }
 
 // TestAccess: the roles of a project's groups are its file's access,
-// given every instance of it in its settings (GroupsSettings,
-// Inputs.Settings) and none of their values: the default group an editor
-// without one, none with {}; refused, the project does not load; access
-// in another file, global.okdp.access in a project's, or the groups'
-// setting in the platform's, refused.
+// given every instance of it in the tree's settings
+// (global.okdp.access.groups, GroupsSettings), and in none of the
+// layers: the default group an editor without one, none with {}; refused,
+// the project does not load; access in another file, global.okdp.access
+// in a project's, or the groups in the platform's, refused.
 func TestAccess(t *testing.T) {
 	platform := "global: {okdp: {access: {admins: [platform_admin], groupPrefix: 'k8s:'}}}\n"
 	for name, tc := range map[string]struct {
 		project string
-		want    map[string]compiler.AccessRole
+		want    map[string]access.Role
 	}{
-		"given":   {"access: {analysts: viewer, okdp-project-demo: admin}\n", map[string]compiler.AccessRole{"analysts": compiler.AccessViewer, "okdp-project-demo": compiler.AccessAdmin}},
-		"absent":  {"", map[string]compiler.AccessRole{"okdp-project-demo": compiler.AccessEditor}},
-		"null":    {"access: null\n", map[string]compiler.AccessRole{"okdp-project-demo": compiler.AccessEditor}},
-		"no file": {"-", map[string]compiler.AccessRole{"okdp-project-demo": compiler.AccessEditor}},
-		"none":    {"access: {}\n", map[string]compiler.AccessRole{}},
+		"given":   {"access: {analysts: viewer, okdp-project-demo: admin}\n", map[string]access.Role{"analysts": access.Viewer, "okdp-project-demo": access.Admin}},
+		"absent":  {"", map[string]access.Role{"okdp-project-demo": access.Editor}},
+		"null":    {"access: null\n", map[string]access.Role{"okdp-project-demo": access.Editor}},
+		"no file": {"-", map[string]access.Role{"okdp-project-demo": access.Editor}},
+		"none":    {"access: {}\n", map[string]access.Role{}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			project := tc.project
@@ -364,13 +388,20 @@ func TestAccess(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(Groups(inst.Inputs), tc.want) || !reflect.DeepEqual(inst.Inputs.Settings, GroupsSettings(tc.want)) {
-				t.Errorf("groups %v, want %v", inst.Inputs.Settings, tc.want)
+			if got := Groups(inst.Inputs); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("groups %v, want %v", got, tc.want)
+			}
+			if !reflect.DeepEqual(inst.Inputs.Settings, GroupsSettings(tc.want)) {
+				t.Errorf("the settings are not the groups': %v", inst.Inputs.Settings)
 			}
 			for _, v := range inst.Inputs.Values {
-				if _, set := v[AccessKey]; set {
+				if _, set := v[AccessKey]; set || value.Dig(v, "global.okdp.access.groups") != nil {
 					t.Errorf("a values layer holds access: %v", v)
 				}
+			}
+			settings, err := compiler.SettingsOf(context.Background(), inst.Inputs)
+			if err != nil || !reflect.DeepEqual(access.Of(settings), tc.want) || value.Dig(settings, "access.groupPrefix") != "k8s:" {
+				t.Errorf("the settings: %v %v", err, settings)
 			}
 		})
 	}
@@ -381,6 +412,7 @@ func TestAccess(t *testing.T) {
 		"the platform's":        {platform + "access: {analysts: viewer}\n", "", "", "db/platform.yaml: access: the roles of a project's groups, its project.yaml's only"},
 		"the values":            {platform, "", "access: {analysts: admin}\n", "db/projects/demo/instances/web/config.yaml: access: the roles of a project's groups"},
 		"a project's okdp":      {platform, "global: {okdp: {access: {admins: [demo]}}}\n", "", "db/projects/demo/project.yaml: global.okdp.access: a platform setting, of level 0 only"},
+		"a project's groups":    {platform, "global: {okdp: {access: {groups: {demo: admin}}}}\n", "", "db/projects/demo/project.yaml: global.okdp.access: a platform setting, of level 0 only"},
 		"the platform's groups": {"global: {okdp: {access: {groups: {analysts: admin}}}}\n", "", "", "db/platform.yaml: global.okdp.access.groups: the roles of a project's groups, of its project.yaml (access), which the tree gives its instances"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -391,7 +423,7 @@ func TestAccess(t *testing.T) {
 	// A project whose access is refused keeps the platform's values
 	// alone, and no group.
 	l, err := LoadProjects(context.Background(), []Repository{{"db", levelsTree(platform, "access: {a/b: viewer}\n", "", ""), RoleTree}}, nil)
-	if err != nil || len(l.Refused) != 1 || l.Refused[0].Own || len(l.Refused[0].Inputs.Values) != 1 || l.Refused[0].Inputs.Settings != nil {
+	if err != nil || len(l.Refused) != 1 || l.Refused[0].Own || len(l.Refused[0].Inputs.Values) != 1 || Groups(l.Refused[0].Inputs) != nil {
 		t.Errorf("refused: %v %+v", err, l)
 	}
 }
@@ -402,12 +434,12 @@ func TestAccess(t *testing.T) {
 func TestProjectAccess(t *testing.T) {
 	for name, tc := range map[string]struct {
 		access any
-		want   map[string]compiler.AccessRole
+		want   map[string]access.Role
 		err    string // the error, none when empty
 	}{
-		"absent":       {nil, map[string]compiler.AccessRole{"okdp-project-demo": compiler.AccessEditor}, ""},
-		"none":         {M{}, map[string]compiler.AccessRole{}, ""},
-		"every role":   {M{"okdp-project-demo": "admin", "analysts": "viewer", "data.eng_team@corp:x": "editor"}, map[string]compiler.AccessRole{"okdp-project-demo": compiler.AccessAdmin, "analysts": compiler.AccessViewer, "data.eng_team@corp:x": compiler.AccessEditor}, ""},
+		"absent":       {nil, map[string]access.Role{"okdp-project-demo": access.Editor}, ""},
+		"none":         {M{}, map[string]access.Role{}, ""},
+		"every role":   {M{"okdp-project-demo": "admin", "analysts": "viewer", "data.eng_team@corp:x": "editor"}, map[string]access.Role{"okdp-project-demo": access.Admin, "analysts": access.Viewer, "data.eng_team@corp:x": access.Editor}, ""},
 		"not a map":    {[]any{"okdp-project-demo"}, nil, "access: the roles of groups, a map of group names to viewer, editor or admin"},
 		"a path":       {M{"/okdp/demo": "viewer"}, nil, `access./okdp/demo: a group name`},
 		"a space":      {M{"demo team": "viewer"}, nil, `access.demo team: a group name`},

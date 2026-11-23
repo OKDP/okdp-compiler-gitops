@@ -51,15 +51,18 @@ connections, those of its dependencies
 the security set's
 [settings](https://github.com/OKDP/okdp-compiler-security/blob/main/docs/specs/01_inputs_outputs.md#platform-settings),
 [platform.yaml](specs/01_layout.md#platformyaml)). The ingress and the
-OIDC provider are settings of the security set, which okdp-gitops gives
-every compile; `ruleSets` requires it, so that a compile without it is
-refused rather than leaving the hosts unchecked:
+OIDC provider are settings of the security set, the network policy and
+the control plane's identity of okdp-gitops' own set, both of which
+okdp-gitops gives every compile; `ruleSets` requires them, so that a
+compile without them is refused rather than leaving the hosts unchecked
+or the engines' namespaces open:
 
 ```yaml
 global:
   okdp:
     ruleSets:
       - {name: security, version: "^1.0.0"}
+      - {name: gitops, version: "^1.0.0"}
     ingress:
       suffix: okdp.example.org
     secrets:

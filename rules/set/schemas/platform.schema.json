@@ -1,0 +1,64 @@
+{
+  "properties": {
+    "global": {
+      "properties": {
+        "okdp": {
+          "properties": {
+            "access": {
+              "properties": {
+                "groupPrefix": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._@:#/-]*$",
+                  "description": "The prefix the Kubernetes API server gives the groups of the users its tokens authenticate (the groups prefix of its token authenticator: its command-line flag, or the claimMappings of its structured authentication configuration): the RoleBindings of a project's groups name each group with it, k8s:okdp-project-demo for k8s:. Argo CD reads the groups claim as it is, without it. Absent: \"\", the groups as the tokens give them."
+                }
+              }
+            },
+            "network": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The network policy of the projects' namespaces. Another key is refused: a misspelt one would leave the namespaces open.",
+              "properties": {
+                "policy": {
+                  "type": "boolean",
+                  "description": "true: the targets write, in each project's namespace but the platform's own (policy.privileged, a setting of the security set), a NetworkPolicy that denies every ingress to its pods but from the namespace itself, from ingressNamespaces and from the namespaces whose claims its instances provide; egress left open. false or absent: none, the namespaces open (the targets do not know the cluster's ingress controller, nor whether its network plugin enforces policies)."
+                },
+                "ingressNamespaces": {
+                  "type": "array",
+                  "items": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"},
+                  "uniqueItems": true,
+                  "description": "With policy: the namespaces whose pods reach every project's pods: the ingress controller's, a monitoring's. Absent: none, a project's services reached by its own namespace and its claimers only."
+                }
+              }
+            },
+            "controlPlane": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "The optional control plane (okdp-control-plane-server). Absent: the platform has none, and the targets bind no identity of it. Another key is refused.",
+              "properties": {
+                "serviceAccount": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["namespace", "name"],
+                  "description": "The control plane's identity, its ServiceAccount: the targets bind it, in each project's namespace, privileged or not, to the Role okdp-control-plane, what it needs there and nothing more; its ClusterRole keeps namespaces get and create.",
+                  "properties": {
+                    "namespace": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$", "description": "Its namespace, a DNS label."},
+                    "name": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$", "maxLength": 253, "description": "Its name, a DNS subdomain."}
+                  }
+                }
+              }
+            },
+            "policy": {
+              "properties": {
+                "projectApiGroups": {
+                  "type": "array",
+                  "items": {"type": "string"},
+                  "description": "API groups added to the Role a project's releases are installed with in its namespace (the Flux target's): the groups of the custom resources a project's charts deploy beside those the target lists. RBAC has no negation: the Role lists its groups, and the groups of the deployer engines (the security set's deployerApiGroups), or *, are never added, whatever this list says. A chart's Role of a group that is not added is refused by the API server (escalation)."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

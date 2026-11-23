@@ -126,8 +126,40 @@ func PutConnection(project string, c compiler.Connection, create bool) (Edit, er
 		if err := checkEntry("connection", target, entries, c.Name, create); err != nil {
 			return nil, err
 		}
-		return editEntry(raw, file, connectionsKey, c.Name, c, &Check{})
+		return editEntry(raw, file, connectionsKey, c.Name, connectionEntry(c), &Check{})
 	}}, nil
+}
+
+// connectionRef: the secretRef of a connection entry.
+type connectionRef struct {
+	Name      string `yaml:"name,omitempty"`
+	RemoteKey string `yaml:"remoteKey,omitempty"`
+}
+
+// entry: a connection as written at connections.<name>, its keys in this
+// order: its own, then the contract's fields, sorted.
+type entry struct {
+	Contract    string         `yaml:"contract"`
+	Description string         `yaml:"description,omitempty"`
+	SecretRef   *connectionRef `yaml:"secretRef,omitempty"`
+	Fields      map[string]any `yaml:",inline"`
+}
+
+// connectionEntry: c as written at connections.<name>, what yaml v3
+// encodes (compiler.ParseConnection reads it back). A key of c.Values
+// named contract, description or secretRef is left out: the connection's
+// own fields give them.
+func connectionEntry(c compiler.Connection) entry {
+	e := entry{Contract: c.Contract, Description: c.Description, Fields: map[string]any{}}
+	if c.SecretRef != "" || c.RemoteKey != "" {
+		e.SecretRef = &connectionRef{Name: c.SecretRef, RemoteKey: c.RemoteKey}
+	}
+	for k, v := range c.Values {
+		if k != "contract" && k != "description" && k != "secretRef" {
+			e.Fields[k] = v
+		}
+	}
+	return e
 }
 
 // DeleteConnection removes a connection of a project, or of the platform

@@ -2,41 +2,41 @@
 # bindings printed, no dependency. With --charts (or $OKDP_CHARTS, read
 # with --check only), the final values are checked against the upstream
 # charts too.
-status 0 okdp-compile --check --repository examples/03_full/input/db
+status 0 okdp-gitops-compile --check --repository examples/03_full/input/db
 ! stdout .
 cmp stderr $WORK/bound.txt
-status 0 okdp-compile --check --charts examples/03_full/.charts --repository examples/03_full/input/db
+status 0 okdp-gitops-compile --check --charts examples/03_full/.charts --repository examples/03_full/input/db
 ! stdout .
 cmp stderr $WORK/bound.txt
 
 # A value the chart's values.schema.json refuses: compiled, and checked
 # without the chart; with it, status 1, the report on stderr.
-status 0 okdp-compile --check --repository $WORK/lib --repository $WORK/bad
+status 0 okdp-gitops-compile --check --repository $WORK/lib --repository $WORK/bad
 env OKDP_CHARTS=$WORK/charts
-status 1 okdp-compile --check --repository $WORK/lib --repository $WORK/bad
+status 1 okdp-gitops-compile --check --repository $WORK/lib --repository $WORK/bad
 ! stdout .
 cmp stderr $WORK/schema.txt
 
 # An instance list appended to (append) where the chart's default list has
 # items the final list lacks: Helm replaces the chart's list. A warning,
 # status 0; none without the chart, nor once the package restates them.
-status 0 okdp-compile --check --repository $WORK/lib --repository $WORK/tree
+status 0 okdp-gitops-compile --check --repository $WORK/lib --repository $WORK/tree
 ! stdout .
 cmp stderr $WORK/warning.txt
 env OKDP_CHARTS=
-status 0 okdp-compile --repository $WORK/lib --repository $WORK/tree -o $WORK/files
+status 0 okdp-gitops-compile --repository $WORK/lib --repository $WORK/tree -o $WORK/files
 ! stderr .
 grep '^  args:\n    - --debug\n' $WORK/files/projects/demo/instances/demo-hello/values.yaml
 cp $WORK/restated.yaml $WORK/lib/catalog/hello/1.0.0/values.yaml
-status 0 okdp-compile --check --charts $WORK/charts --repository $WORK/lib --repository $WORK/tree
+status 0 okdp-gitops-compile --check --charts $WORK/charts --repository $WORK/lib --repository $WORK/tree
 ! stderr .
 
 # --check with --output, --charts without --check: status 1, nothing
 # written.
-status 1 okdp-compile --check --repository $WORK/lib --repository $WORK/tree -o $WORK/check
+status 1 okdp-gitops-compile --check --repository $WORK/lib --repository $WORK/tree -o $WORK/check
 stderr '^error: --check writes nothing: no --output \(-o\)$'
 ! exists $WORK/check
-status 1 okdp-compile --charts $WORK/charts --repository $WORK/lib --repository $WORK/tree -o $WORK/charted
+status 1 okdp-gitops-compile --charts $WORK/charts --repository $WORK/lib --repository $WORK/tree -o $WORK/charted
 stderr '^error: --charts is read by --check only: a compile reads no chart$'
 ! exists $WORK/charted
 

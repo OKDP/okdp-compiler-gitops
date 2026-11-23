@@ -1,4 +1,4 @@
-// okdp-compile --repository <dir> [--repository <dir>]... [--catalog <dir>]... -o <dir>
+// okdp-gitops-compile --repository <dir> [--repository <dir>]... [--catalog <dir>]... -o <dir>
 //
 //	[--target helm|flux|argocd] [--path-prefix <path>]
 //	[--flux-source <namespace>/<name>] [--repo-url <url>] [--revision <rev>]
@@ -97,7 +97,7 @@ func main() {
 	flag.StringVar(&o.report, "report", "", "write a JSON report, to the file, or stdout for -, even with --check and when the compile fails: each instance, its namespace, instance, release, service, version, privileged, status (compiled, refused or skipped), error, warnings, dependencies, claims and charts, and the tree's errors")
 	flag.BoolVar(&o.allowPlainSecrets, "allow-plain-secrets", false, "accept credentials written in clear (Inputs.AllowPlainSecrets of every instance): a provides secret without generate, a Secret of the objects with data or stringData; refused without it, the output being committed to the deployments repository")
 	flag.BoolVar(&o.partial, "partial", false, "write the projects whose instances all compile, each refusal printed, and keep what <output> holds of the others' instances, their manifests and identity of today's settings, and of the projects of a release name two namespaces share (--target flux and argocd); status 1 all the same; a failure of the tree (an option, a repository, the target) writes nothing")
-	flag.BoolVar(&o.force, "force", false, "write into an <output>/projects/ that okdp-compile did not write (no "+outdir.MarkerFile+"), removing from it every file it does not write")
+	flag.BoolVar(&o.force, "force", false, "write into an <output>/projects/ that okdp-gitops-compile did not write (no "+outdir.MarkerFile+"), removing from it every file it does not write")
 	flag.Parse()
 	if o.check && o.charts == "" {
 		o.charts = os.Getenv("OKDP_CHARTS")

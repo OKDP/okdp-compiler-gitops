@@ -11,6 +11,7 @@ import (
 	"testing/fstest"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/access"
 	"github.com/okdp/okdp-gitops/internal/target"
 	"github.com/okdp/okdp-gitops/internal/target/argocd"
 	"github.com/okdp/okdp-gitops/internal/target/flux"
@@ -25,7 +26,7 @@ func compiled(names []string, refused ...string) *tree.Tree {
 	t := &tree.Tree{}
 	for _, n := range names {
 		ns, name, _ := strings.Cut(n, "/")
-		groups := map[string]compiler.AccessRole{tree.DefaultProjectGroup(ns): compiler.AccessEditor} // as the tree gives a project without access
+		groups := map[string]access.Role{tree.DefaultProjectGroup(ns): access.Editor} // as the tree gives a project without access
 		ti := &tree.Instance{Name: name, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: ns, Release: ns + "-" + name, Settings: tree.GroupsSettings(groups)}}
 		if slices.Contains(refused, n) {
 			ti.Outcome.Err = errors.New("refused")
@@ -281,7 +282,7 @@ func TestFilesRederive(t *testing.T) {
 		"projects/demo/project/access.yaml":           file("old access\n"),
 		"projects/demo/instances/demo-web/Chart.yaml": file("old web\n"),
 	}
-	tr.Instances[0].Inputs.Settings = tree.GroupsSettings(map[string]compiler.AccessRole{"devs": compiler.AccessEditor})
+	tr.Instances[0].Inputs.Values, tr.Instances[0].Inputs.Settings = nil, tree.GroupsSettings(map[string]access.Role{"devs": access.Editor})
 	files, kept, err := Files(tr, []target.Target{flux.Target{}}, previous, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -404,13 +405,13 @@ func TestFilesDropped(t *testing.T) {
 }
 
 // TestPlatformObjectNames: the names the targets write in every namespace
-// are among compiler.PlatformObjectNames, which a release may not take
-// (okdp.checkRelease).
+// are in the table platformObjectNames of the set of okdp-gitops, which a
+// release may not take (its release hook).
 func TestPlatformObjectNames(t *testing.T) {
-	names := []string{flux.RoleName, target.NetworkPolicyName, target.ControlPlaneName, target.AccessName(compiler.AccessViewer), target.AccessName(compiler.AccessEditor), target.AccessName(compiler.AccessAdmin)}
+	names := []string{flux.RoleName, target.NetworkPolicyName, target.ControlPlaneName, target.AccessName(access.Viewer), target.AccessName(access.Editor), target.AccessName(access.Admin)}
 	for _, n := range names {
-		if !slices.Contains(compiler.PlatformObjectNames(rules.Standard()), n) {
-			t.Errorf("%s: written by a target in every namespace, not in compiler.PlatformObjectNames", n)
+		if !slices.Contains(rules.Standard().List("platformObjectNames"), n) {
+			t.Errorf("%s: written by a target in every namespace, not in the table platformObjectNames", n)
 		}
 	}
 }

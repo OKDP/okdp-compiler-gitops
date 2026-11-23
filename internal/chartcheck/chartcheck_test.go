@@ -63,6 +63,18 @@ func TestCheck(t *testing.T) {
 	}
 }
 
+// TestSchemaError: the charts with violations, in name order, none
+// without.
+func TestSchemaError(t *testing.T) {
+	err := SchemaError("values", map[string]string{"b": "- at '/x': b", "a": "- at '/y': a", "c": ""})
+	if want := "values don't meet the specifications of the schema(s) in the following chart(s):\na:\n- at '/y': a\nb:\n- at '/x': b"; err == nil || err.Error() != want {
+		t.Errorf("got %v, want %q", err, want)
+	}
+	if err := SchemaError("values", map[string]string{"c": ""}); err != nil {
+		t.Errorf("no violation: got %v", err)
+	}
+}
+
 // TestCheckMissing: a chart a static cache lacks fails with the command
 // that pulls it, which the catalogs' compile-charts.sh runs.
 func TestCheckMissing(t *testing.T) {

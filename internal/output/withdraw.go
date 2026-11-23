@@ -75,7 +75,8 @@ func dropResource(b []byte, r string) []byte {
 // (policy.UpstreamCheck) and the rule set's finalValues hook, the ingress
 // hosts (compiler.CheckFinalValues), and what the charts of the keys it
 // gives values to render, with the rule set's objects hook
-// (compiler.CheckObjects). nil when it passes,
+// (compiler.CheckObjects, credentials in clear allowed: the rendered
+// output is not written, as for helmvalues.CheckRendered). nil when it passes,
 // or when nothing can tell: no output, no chart at hand (charts nil, or
 // a chart it lacks), a chart that does not render (the instance's refusal
 // says why it compiled no further).
@@ -83,7 +84,7 @@ func violation(ti *tree.Instance, files map[string][]byte, charts fs.FS) error {
 	ctx := context.Background() // the output of a tree is written without one
 	in := ti.Inputs
 	settings, err := compiler.SettingsOf(ctx, in)
-	if err != nil || compiler.Privileged(settings, in.Namespace) {
+	if err != nil || policy.Privileged(settings, in.Namespace) {
 		return nil //nolint:nilerr // no platform settings: the instance's refusal says why
 	}
 	dir := target.InstanceDir(in.Namespace, ti.Release())
@@ -130,7 +131,7 @@ func violation(ti *tree.Instance, files map[string][]byte, charts fs.FS) error {
 			continue
 		}
 		svc := "upstream." + key + " (rendered)"
-		if err := compiler.CheckObjects(ctx, in.Rules, svc, in.Namespace, settings, objects); err != nil {
+		if err := compiler.CheckObjects(ctx, in.Rules, svc, in.Namespace, settings, true, objects); err != nil {
 			return err
 		}
 	}

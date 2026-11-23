@@ -17,6 +17,7 @@ import (
 	"testing/fstest"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/access"
 
 	"github.com/okdp/okdp-gitops/deploy"
 	"github.com/okdp/okdp-gitops/internal/helmvalues"
@@ -49,8 +50,8 @@ func TestTreeNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(instances) != 1 || len(instances[0].Inputs.Values) != 4 {
-		t.Fatalf("got %d instances, want one with its 4 values layers: the platform's, the project's, its connections and its values", len(instances))
+	if len(instances) != 1 || len(instances[0].Inputs.Values) != 4 || instances[0].Inputs.Settings == nil {
+		t.Fatalf("got %d instances, want one with its 4 values layers, the platform's, the project's, its connections and its values, and its project's groups in its settings", len(instances))
 	}
 	in := instances[0].Inputs
 	if want := tree.ReleaseName("demo", "web"); in.Release != want || want != "demo-web" || in.Namespace != "demo" {
@@ -184,17 +185,17 @@ func TestAccess(t *testing.T) {
 		}
 	}
 	got, err := deploy.ProjectAccess(nil, []byte(project), "demo")
-	if want := map[string]compiler.AccessRole{"okdp-project-demo": compiler.AccessAdmin, "analysts": compiler.AccessViewer}; err != nil || !maps.Equal(got, want) {
+	if want := map[string]access.Role{"okdp-project-demo": access.Admin, "analysts": access.Viewer}; err != nil || !maps.Equal(got, want) {
 		t.Errorf("ProjectAccess: %v, %v", got, err)
 	}
-	if got, err := deploy.ProjectAccess(nil, []byte("description: no access\n"), "ops"); err != nil || !maps.Equal(got, map[string]compiler.AccessRole{"okdp-project-ops": compiler.AccessEditor}) {
+	if got, err := deploy.ProjectAccess(nil, []byte("description: no access\n"), "ops"); err != nil || !maps.Equal(got, map[string]access.Role{"okdp-project-ops": access.Editor}) {
 		t.Errorf("ProjectAccess, the default: %v, %v", got, err)
 	}
 	if _, err := deploy.ProjectAccess(nil, []byte("access: {a/b: viewer}\n"), "demo"); err == nil || !strings.Contains(err.Error(), "access.a/b: a group name") {
 		t.Errorf("ProjectAccess, a refused group: %v", err)
 	}
-	if tree.DefaultProjectGroup("demo") != "okdp-project-demo" || !compiler.IsGroupName("platform_admin") || compiler.IsGroupName("/platform_admin") {
-		t.Error("DefaultProjectGroup, IsGroupName")
+	if tree.DefaultProjectGroup("demo") != "okdp-project-demo" {
+		t.Error("DefaultProjectGroup")
 	}
 }
 

@@ -2,14 +2,14 @@
 # and removes from it every file it does not write. A projects/ that holds
 # files but not the mark, which the command did not write, is refused:
 # status 1, nothing removed, nothing written; --force writes over it.
-status 1 okdp-compile --repository examples/01_minimal/input/db -o $WORK/out
+status 1 okdp-gitops-compile --repository examples/01_minimal/input/db -o $WORK/out
 ! stdout .
-stderr '^error: .*out/projects/ exists and was not written by okdp-compile \(no projects/.okdp-compile\): choose an empty output, or remove it yourself$'
+stderr '^error: .*out/projects/ exists and was not written by okdp-gitops-compile \(no projects/.okdp-compile\): choose an empty output, or remove it yourself$'
 exists $WORK/out/projects/notes.md
 ! exists $WORK/out/projects/demo
 ! exists $WORK/out/projects/.okdp-compile
 
-status 0 okdp-compile --repository examples/01_minimal/input/db -o $WORK/out --force
+status 0 okdp-gitops-compile --repository examples/01_minimal/input/db -o $WORK/out --force
 ! exists $WORK/out/projects/notes.md
 exists $WORK/out/projects/demo/instances/demo-hello/values.yaml
 cmp $WORK/out/projects/.okdp-compile $WORK/marker.txt
@@ -17,7 +17,7 @@ cmp $WORK/out/projects/.okdp-compile $WORK/marker.txt
 # Marked: written again without --force, a stale file removed; the
 # output's own files beside projects/ kept.
 cp $WORK/out/projects/.okdp-compile $WORK/out/projects/demo/stale.yaml
-status 0 okdp-compile --repository examples/01_minimal/input/db -o $WORK/out
+status 0 okdp-gitops-compile --repository examples/01_minimal/input/db -o $WORK/out
 ! exists $WORK/out/projects/demo/stale.yaml
 exists $WORK/out/README.md
 
@@ -27,30 +27,30 @@ exists $WORK/out/README.md
 rm $WORK/out/projects/demo
 mkdir $WORK/out/elsewhere
 symlink $WORK/out/projects/demo -> ../elsewhere
-status 0 okdp-compile --repository examples/01_minimal/input/db -o $WORK/out
+status 0 okdp-gitops-compile --repository examples/01_minimal/input/db -o $WORK/out
 exists $WORK/out/projects/demo/instances/demo-hello/values.yaml
 ! exists $WORK/out/elsewhere/instances
 rm $WORK/out/projects/demo/instances
 symlink $WORK/out/projects/demo/instances -> $WORK/outside
-status 0 okdp-compile --repository examples/01_minimal/input/db -o $WORK/out
+status 0 okdp-gitops-compile --repository examples/01_minimal/input/db -o $WORK/out
 exists $WORK/out/projects/demo/instances/demo-hello/values.yaml
 ! exists $WORK/outside/demo-hello
 exists $WORK/outside/keep.txt
 
 # An empty projects/, or none: nothing to remove.
 mkdir $WORK/empty/projects
-status 0 okdp-compile --repository examples/01_minimal/input/db -o $WORK/empty
+status 0 okdp-gitops-compile --repository examples/01_minimal/input/db -o $WORK/empty
 exists $WORK/empty/projects/.okdp-compile
-status 0 okdp-compile --repository examples/01_minimal/input/db -o $WORK/new
+status 0 okdp-gitops-compile --repository examples/01_minimal/input/db -o $WORK/new
 exists $WORK/new/projects/.okdp-compile
 
 # A projects/ that is a symbolic link: refused, even with --force.
 symlink $WORK/linked/projects -> $WORK/out/projects
-status 1 okdp-compile --repository examples/01_minimal/input/db -o $WORK/linked --force
+status 1 okdp-gitops-compile --repository examples/01_minimal/input/db -o $WORK/linked --force
 stderr '^error: .*linked/projects is a symbolic link: the command writes no file through one$'
 
 # --check writes nothing: no --force.
-status 1 okdp-compile --repository examples/01_minimal/input/db --check --force
+status 1 okdp-gitops-compile --repository examples/01_minimal/input/db --check --force
 stderr '^error: --check writes nothing: no --force$'
 
 -- out/projects/notes.md --
@@ -61,5 +61,6 @@ The output repository's own file.
 -- outside/keep.txt --
 Not the command's either.
 -- marker.txt --
-okdp-compile writes projects/ and removes from it every file it does not
-write. Remove this file, and it refuses to write here without --force.
+okdp-gitops-compile writes projects/ and removes from it every file it
+does not write. Remove this file, and it refuses to write here without
+--force.

@@ -3,7 +3,7 @@
 # what it publishes, no objects file without objects; on stderr, each
 # claim's binding, then the instances each depends on, one line each, by
 # parameter path.
-status 0 okdp-compile --repository examples/02_advanced/input/db -o $WORK/files
+status 0 okdp-gitops-compile --repository examples/02_advanced/input/db -o $WORK/files
 ! stdout .
 cmp stderr $WORK/webapp.txt
 cmp $WORK/files/projects/demo/instances/demo-webapp/values.yaml examples/02_advanced/output/projects/demo/instances/demo-webapp/values.yaml
@@ -12,14 +12,14 @@ cmp $WORK/files/projects/demo/instances/demo-webapp/okdp.info.yaml examples/02_a
 
 # The context by level: platform.yaml (0), the project's project.yaml (1),
 # the instance's connections.yaml (2), then its config.yaml.
-status 0 okdp-compile --repository examples/03_full/input/db -o $WORK/full
+status 0 okdp-gitops-compile --repository examples/03_full/input/db -o $WORK/full
 ! stdout .
 cmp stderr $WORK/workspace.txt
 cmp $WORK/full/projects/demo/instances/demo-workspace/values.yaml examples/03_full/output/projects/demo/instances/demo-workspace/values.yaml
 
 # A tree that reads no contract and depends on nothing: nothing printed,
 # and an instance that publishes nothing has no okdp.info.yaml.
-status 0 okdp-compile --repository examples/00_passthrough/input/db -o $WORK/echo
+status 0 okdp-gitops-compile --repository examples/00_passthrough/input/db -o $WORK/echo
 ! stdout .
 ! stderr .
 cmp $WORK/echo/projects/demo/instances/demo-echo/values.yaml examples/00_passthrough/output/projects/demo/instances/demo-echo/values.yaml

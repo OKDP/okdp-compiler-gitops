@@ -1,7 +1,7 @@
-// Package outdir: the output directory of okdp-compile, the one place a
-// compile writes: the files of a compiled tree written under the
-// directory's projects/, which the command owns (Write), after a check that
-// projects/ is its own (Check).
+// Package outdir: the output directory of okdp-gitops-compile, the one
+// place a compile writes: the files of a compiled tree written under the
+// directory's projects/, which the command owns (Write), after a check
+// that projects/ is its own (Check).
 package outdir
 
 import (
@@ -17,11 +17,13 @@ import (
 // MarkerFile: projects/.okdp-compile, the mark of an output directory
 // the command wrote (Marker): its projects/ the command's, which it
 // removes from what it does not write (Write); an output whose
-// projects/ holds files but not the mark is refused (Check).
+// projects/ holds files but not the mark is refused (Check). The name is
+// that of the command before it was okdp-gitops-compile, kept: the
+// outputs written before keep their mark, and are not refused.
 const MarkerFile = "projects/.okdp-compile"
 
 // Marker: the content of MarkerFile.
-const Marker = "okdp-compile writes projects/ and removes from it every file it does not\nwrite. Remove this file, and it refuses to write here without --force.\n"
+const Marker = "okdp-gitops-compile writes projects/ and removes from it every file it\ndoes not write. Remove this file, and it refuses to write here without\n--force.\n"
 
 // Check: nil when output/projects/ does not exist, is empty, holds
 // MarkerFile, or force is given (--force): the command then removes from
@@ -48,7 +50,7 @@ func Check(output string, force bool) error {
 	if entries, err := os.ReadDir(projects); err == nil && len(entries) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%s%c exists and was not written by okdp-compile (no %s): choose an empty output, or remove it yourself", projects, filepath.Separator, MarkerFile)
+	return fmt.Errorf("%s%c exists and was not written by okdp-gitops-compile (no %s): choose an empty output, or remove it yourself", projects, filepath.Separator, MarkerFile)
 }
 
 // Write: files into dir, created if needed, with the directories of

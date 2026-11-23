@@ -14,13 +14,13 @@
 // 0 gives template code: the platform's file is reviewed with the
 // platform, the higher levels are a project's input.
 //
-// A project's access reaches its instances as the setting
-// global.okdp.access.groups, in the host's settings the tree gives beside
-// the files' layers (GroupsSettings, Inputs.Settings): no chart receives
-// them, no file sets that key, the platform's neither, so that the
-// groups of a namespace are its project's alone. The compiler refuses a
-// layer that gives them too; the tree refuses the platform's file
-// first, naming the file.
+// A project's access reaches its instances as the settings the security
+// set reads, global.okdp.access.groups, in the host's settings the tree
+// gives beside the files' layers (GroupsSettings, Inputs.Settings): no
+// chart receives them, no file sets that key, the platform's neither, so
+// that the groups of a namespace are its project's alone. The compiler
+// refuses a layer that gives them too; the tree refuses the platform's
+// file first, naming the file.
 //
 // An instance's ConfigFile sets only the keys of global its package's
 // parameter schema declares, never okdp, and no connections (its own are
@@ -37,6 +37,7 @@ import (
 	"strings"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/access"
 	"github.com/okdp/okdp-compiler-security/policy"
 	"github.com/okdp/okdp-compiler/chart"
 	"github.com/okdp/okdp-compiler/value"
@@ -50,8 +51,8 @@ type M = map[string]any
 const AccessKey = "access"
 
 // groupsSetting is the path of the groups of a namespace in the values,
-// the setting the tree gives in Inputs.Settings (GroupsSettings).
-const groupsSetting = "global.okdp.access.groups"
+// the setting of the security set (access.Setting under global.okdp).
+const groupsSetting = "global.okdp." + access.Setting
 
 // DefaultProjectGroup returns okdp-project-<namespace>, the group that is
 // an editor of a project whose ProjectFile gives no access.
@@ -87,6 +88,29 @@ func wholePath(keys []string) bool {
 		}
 		return true
 	})
+}
+
+// overlap returns the first path, in path order, where layer sets a value
+// that base already sets, or "" when there is none. A key overlaps when
+// its two values are not both maps, or when the map at its path counts as
+// one value (wholePath). The path is formatted with chart.FormatPath.
+func overlap(base, layer M, at []string) string {
+	for _, k := range slices.Sorted(maps.Keys(layer)) {
+		b, ok := base[k]
+		if !ok {
+			continue
+		}
+		p := append(slices.Clip(at), k)
+		bm, bok := b.(M)
+		lm, lok := layer[k].(M)
+		if !bok || !lok || wholePath(p) {
+			return chart.FormatPath(p)
+		}
+		if s := overlap(bm, lm, p); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // layer is a values file of the tree at its level.
@@ -129,7 +153,7 @@ func (ls levels) add(l layer) (levels, error) {
 	}
 	var errs []error
 	for _, lower := range out.byLevel[:len(out.byLevel)-1] {
-		if p := chart.Overlap(lower.values, values, wholePath); p != "" {
+		if p := overlap(lower.values, values, nil); p != "" {
 			errs = append(errs, fmt.Errorf("%s: %s is set at level %d, by %s: a level adds values, it does not change a lower level's", l.file, p, lower.level, strings.Join(lower.files, ", ")))
 		}
 	}
@@ -151,8 +175,7 @@ func (ls levels) add(l layer) (levels, error) {
 // checkKeys refuses what the level of l may not set: of global.okdp
 // above level 0, anything but projectSettings; of the rest of global
 // above level 0, a key the platform does not list; claims at level 0;
-// the groups' setting at level 0 (groupsSetting, the tree's); access but
-// at level 1.
+// access but at level 1.
 func (ls levels) checkKeys(l layer, values M) []error {
 	var errs []error
 	global := value.AsMap(values["global"])
@@ -307,54 +330,46 @@ func declaredGlobals(def *compiler.Definition) M {
 // namespace from the values of its ProjectFile, as read: access, its
 // default group an editor when absent or null (DefaultProjectGroup), {}
 // no group. It reports every problem at once.
-func ProjectAccess(values map[string]any, namespace string) (map[string]compiler.AccessRole, error) {
+func ProjectAccess(values map[string]any, namespace string) (map[string]access.Role, error) {
 	v := values[AccessKey]
 	if v == nil {
-		return map[string]compiler.AccessRole{DefaultProjectGroup(namespace): compiler.AccessEditor}, nil
+		return map[string]access.Role{DefaultProjectGroup(namespace): access.Editor}, nil
 	}
-	return compiler.ParseAccess(AccessKey, v)
+	return access.Parse(AccessKey, v)
 }
 
 // GroupsSettings returns the settings that give the instances of a
-// project the roles of its groups, global.okdp.access.groups: the tree
-// gives them in Inputs.Settings, so that no chart receives them. nil for
-// nil groups: no settings, no group.
-func GroupsSettings(groups map[string]compiler.AccessRole) map[string]any {
+// project the roles of its groups, global.okdp.access.groups
+// (access.Settings), which the security set reads: the tree gives them in
+// Inputs.Settings, so that no chart receives them. nil for nil groups: no
+// settings, no group.
+func GroupsSettings(groups map[string]access.Role) map[string]any {
 	if groups == nil {
 		return nil
 	}
-	m := M{}
-	for g, r := range groups {
-		m[g] = string(r)
-	}
-	return map[string]any{"access": M{"groups": m}}
+	return access.Settings(groups)
 }
 
 // Groups returns the roles of the groups the tree gives in
 // (GroupsSettings, in.Settings), what the targets write a project's
-// access from; nil when it gives none.
-func Groups(in compiler.Inputs) map[string]compiler.AccessRole {
-	v := value.Dig(in.Settings, "access.groups")
-	if v == nil {
+// access from, whatever rule set it compiles with; nil when it gives
+// none.
+func Groups(in compiler.Inputs) map[string]access.Role {
+	if value.Dig(in.Settings, access.Setting) == nil {
 		return nil
 	}
-	m := value.AsMap(v)
-	out := make(map[string]compiler.AccessRole, len(m))
-	for g, r := range m {
-		out[g] = compiler.AccessRole(value.Str(r))
-	}
-	return out
+	return access.Of(in.Settings)
 }
 
 // withGroups returns in with the settings of groups (GroupsSettings),
 // none for nil groups.
-func withGroups(in compiler.Inputs, groups map[string]compiler.AccessRole) compiler.Inputs {
+func withGroups(in compiler.Inputs, groups map[string]access.Role) compiler.Inputs {
 	in.Settings = GroupsSettings(groups)
 	return in
 }
 
 // projectAccess is ProjectAccess of the project's file, file.
-func projectAccess(file string, values M, namespace string) (map[string]compiler.AccessRole, error) {
+func projectAccess(file string, values M, namespace string) (map[string]access.Role, error) {
 	groups, err := ProjectAccess(values, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", file, err)
@@ -375,5 +390,5 @@ func globalsCheck(ctx context.Context, check func(context.Context, policy.Global
 	if err != nil {
 		return nil //nolint:nilerr // the compile refuses the settings
 	}
-	return check(ctx, policy.GlobalsInput{Rules: in.Rules, Settings: settings, Namespace: in.Namespace, Privileged: compiler.Privileged(settings, in.Namespace), Layers: []policy.GlobalLayer{{Name: file, Global: g}}})
+	return check(ctx, policy.GlobalsInput{Rules: in.Rules, Settings: settings, Namespace: in.Namespace, Privileged: policy.Privileged(settings, in.Namespace), Layers: []policy.GlobalLayer{{Name: file, Global: g}}})
 }

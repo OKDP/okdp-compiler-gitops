@@ -4,7 +4,7 @@
 # GitHub release. Settings: release-please-config.json; the current version:
 # .release-please-manifest.json.
 #
-# Then, when a release was created, goreleaser builds the okdp-compile
+# Then, when a release was created, goreleaser builds the okdp-gitops-compile
 # binaries of its tag and attaches them to it, its notes kept, with an
 # SBOM of each archive and the checksums signed keyless by cosign
 # (.goreleaser.yaml); the build provenance of the archives is attested

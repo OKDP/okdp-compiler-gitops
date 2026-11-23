@@ -4,23 +4,23 @@
 # standard, which every namespace may claim of (its claimers), provisions
 # them, compiled first. Each binding on stderr, then,
 # the files written, the dependencies, across namespaces.
-status 0 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree -o $WORK/out
+status 0 okdp-gitops-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree -o $WORK/out
 ! stdout .
 cmp stderr $WORK/stderr.txt
 cmp $WORK/out/projects/data/instances/data-pg/okdp.info.yaml $WORK/info.txt
 cmp $WORK/out/projects/demo/instances/demo-app/values.yaml $WORK/values.txt
 
 # Flux: demo-app's HelmRelease waits for data-pg's, of another namespace.
-status 0 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree -o $WORK/flux --target flux
+status 0 okdp-gitops-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree -o $WORK/flux --target flux
 grep -count=1 'name: "data-pg"' $WORK/flux/projects/demo/instances/demo-app/helmrelease.yaml
 
 # A second provider: the claims stay with the default class's.
-status 0 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/second -o $WORK/second-out
+status 0 okdp-gitops-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/second -o $WORK/second-out
 cmp stderr $WORK/stderr.txt
 
 # No default class: a claim that names neither a class nor a provider is
 # refused, the classes said; nothing written.
-status 1 okdp-compile --repository $WORK/lib --repository $WORK/tree --repository $WORK/second -o $WORK/none
+status 1 okdp-gitops-compile --repository $WORK/lib --repository $WORK/tree --repository $WORK/second -o $WORK/none
 stderr '^error: demo/demo-app: claims.reports: claim \(server\): it names no class, and the settings set no default one, global.okdp.provisioning.server.default: no class of server connections is defined \(global.okdp.provisioning.server.classes\)$'
 stderr '^db: claim \(server\): it names no class, and the settings set no default one, global.okdp.provisioning.server.default: no class of server connections is defined \(global.okdp.provisioning.server.classes\)$'
 ! exists $WORK/none
@@ -30,13 +30,13 @@ stderr '^db: claim \(server\): it names no class, and the settings set no defaul
 # written. Named, that provider binds it, and so does a class of the
 # project's, named: of another namespace, with its consent, its
 # instance.yaml listing the project among its claimers.
-status 1 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/second --repository $WORK/strict -o $WORK/strict-out
+status 1 okdp-gitops-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/second --repository $WORK/strict -o $WORK/strict-out
 stderr '^error: reports/reports-strict: db \(claim "reports.strict.db" of data/data-pg\): the connection does not meet the package''s requirement \(x-okdp-connection-ref.require\); data/data-pg is the provider of the default class standard of server connections \(global.okdp.provisioning.server.default\): name a class whose provider meets it \(class\), or change the default:$'
 stderr '^- at ''/host'': ''data-pg-rw.data.svc'' does not match pattern ''\^data2-pg2-''$'
 ! exists $WORK/strict-out
-status 0 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/second --repository $WORK/named -o $WORK/named-out
+status 0 okdp-gitops-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/second --repository $WORK/named -o $WORK/named-out
 stderr '^reports/reports-strict: db: claim reports.strict.db \(server\) bound to data2/data2-pg2$'
-status 0 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/second --repository $WORK/classes -o $WORK/classes-out
+status 0 okdp-gitops-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/second --repository $WORK/classes -o $WORK/classes-out
 stderr '^reports/reports-strict: db: claim reports.strict.db \(server\) bound to data2/data2-pg2, class second$'
 
 # Without its consent, a provider of another namespace serves no claim
@@ -45,19 +45,19 @@ stderr '^reports/reports-strict: db: claim reports.strict.db \(server\) bound to
 # instance.yaml's, else its package's provisions'; nothing written.
 # data/data-pg, above, lists every namespace. A package's claimers bind
 # the namespaces they list, unless its instance lists its own.
-status 1 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/closed --repository $WORK/named -o $WORK/closed-out
+status 1 okdp-gitops-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/closed --repository $WORK/named -o $WORK/closed-out
 stderr '^error: reports/reports-strict: db: claim "reports.strict.db" \(server\): of data2/data2-pg2, another namespace: reports is not one of its claimers \(claimers of instance data2/data2-pg2: none, its package''s\): the provider lists the namespaces that may claim of it \(Inputs.Claimers, else its package''s provisions\)$'
 ! exists $WORK/closed-out
-status 1 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/others --repository $WORK/classes -o $WORK/others-out
+status 1 okdp-gitops-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/others --repository $WORK/classes -o $WORK/others-out
 stderr '^error: reports/reports-strict: db: claim "reports.strict.db" \(server\): of data2/data2-pg2, the provider of class "second", another namespace: reports is not one of its claimers \(claimers of instance data2/data2-pg2: demo\): the provider lists'
 ! exists $WORK/others-out
-status 0 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/open --repository $WORK/named -o $WORK/open-out
+status 0 okdp-gitops-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/open --repository $WORK/named -o $WORK/open-out
 stderr '^reports/reports-strict: db: claim reports.strict.db \(server\) bound to data2/data2-pg2$'
 
 # A request the contract's claim schema refuses (x-okdp-claim): the
 # claimer is refused when it binds, every violation said; nothing
 # written.
-status 1 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/big -o $WORK/big-out
+status 1 okdp-gitops-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/big -o $WORK/big-out
 stderr '^error: reports/reports-big: db: claim \(server\): the request does not meet the contract''s claim schema \(x-okdp-claim\):$'
 stderr '^- at ''/size'': ''5G'' does not match pattern ''\^\[0-9\]\+Gi\$''$'
 ! exists $WORK/big-out

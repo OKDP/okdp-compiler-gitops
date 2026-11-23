@@ -1,4 +1,4 @@
-// Package helm writes a compile as the files of okdp-compile (Write):
+// Package helm writes a compile as the files of okdp-gitops-compile (Write):
 // one chart for the whole instance, an umbrella over the upstream charts of
 // its keys and the chart of OKDP's own objects, for one Helm release per instance under
 // the release name its values were compiled for, and what the instance
@@ -44,7 +44,8 @@ const (
 //     objects, Result.Objects as one YAML stream, one document per object,
 //     under compiler.ObjectsChart, compiler.ObjectsValue: a string, so that Helm
 //     changes neither the {{ of an ExternalSecret's template, nor a null,
-//     nor an integer beyond the precision of a float64;
+//     nor an integer beyond the precision of a float64; an object Helm
+//     keeps given Argo CD's sync options Prune=false,Delete=false (kept);
 //   - InfoFile, when the instance publishes something: a URL, a usage
 //     or a connection.
 //
@@ -53,7 +54,7 @@ const (
 // what Compile returned: Write does not check it again.
 func Write(res *compiler.Result) (map[string][]byte, error) {
 	values := compiler.ChartValues(res)
-	objects, err := compiler.ObjectsChartValues(res)
+	objects, err := compiler.ObjectsChartValues(kept(res))
 	if err != nil {
 		return nil, err
 	}
@@ -117,5 +118,7 @@ const (
 	ObjectsValues = compiler.ObjectsValuesFile
 )
 
-// WriteValues: what a plain helm install of res needs, the compiler's.
-func WriteValues(res *compiler.Result) (map[string][]byte, error) { return compiler.Write(res) }
+// WriteValues: what a plain helm install of res needs, the compiler's,
+// an object Helm keeps given Argo CD's sync options as Write gives it
+// (kept).
+func WriteValues(res *compiler.Result) (map[string][]byte, error) { return compiler.Write(kept(res)) }

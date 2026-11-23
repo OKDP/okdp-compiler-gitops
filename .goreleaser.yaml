@@ -1,6 +1,6 @@
-# The okdp-compile binaries of a release: goreleaser builds them from the
-# release's tag, vX.Y.Z, and attaches them to its GitHub release, which
-# release-please has published with its notes
+# The okdp-gitops-compile binaries of a release: goreleaser builds them
+# from the release's tag, vX.Y.Z, and attaches them to its GitHub
+# release, which release-please has published with its notes
 # (.github/workflows/release-please.yml), with an SBOM of each archive
 # (syft) and the checksums file signed by cosign, keyless: its Sigstore
 # bundle holds the signature and the certificate of the workflow's
@@ -9,12 +9,12 @@
 # check` checks this file.
 version: 2
 
-project_name: okdp-compile
+project_name: okdp-gitops-compile
 
 builds:
-  - id: okdp-compile
-    main: ./cmd/okdp-compile
-    binary: okdp-compile
+  - id: okdp-gitops-compile
+    main: ./cmd/okdp-gitops-compile
+    binary: okdp-gitops-compile
     env:
       - CGO_ENABLED=0
     goos: [linux, darwin, windows]
@@ -28,9 +28,9 @@ builds:
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
-  - id: okdp-compile
-    ids: [okdp-compile]
-    name_template: "okdp-compile_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - id: okdp-gitops-compile
+    ids: [okdp-gitops-compile]
+    name_template: "okdp-gitops-compile_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -40,7 +40,7 @@ archives:
       - README.md
 
 checksum:
-  name_template: "okdp-compile_{{ .Version }}_checksums.txt"
+  name_template: "okdp-gitops-compile_{{ .Version }}_checksums.txt"
   algorithm: sha256
 
 # An SPDX SBOM of each archive, <archive>.sbom.json, by syft (on the PATH:

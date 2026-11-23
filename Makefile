@@ -16,8 +16,8 @@ GOFILES = $(shell find . -name '*.go' -not -path './.*')
 build: ## Compile the CLI to bin/okdp-gitops
 	go build -ldflags "$(LDFLAGS)" -o bin/okdp-gitops ./cmd/okdp-gitops
 
-build-compile: ## Compile the okdp-compile CLI to bin/okdp-compile
-	go build -ldflags "-X main.version=$(VERSION)" -o bin/okdp-compile ./cmd/okdp-compile
+build-compile: ## Compile the okdp-gitops-compile CLI to bin/okdp-gitops-compile
+	go build -ldflags "-X main.version=$(VERSION)" -o bin/okdp-gitops-compile ./cmd/okdp-gitops-compile
 
 test: ## Run all tests
 	go test ./...

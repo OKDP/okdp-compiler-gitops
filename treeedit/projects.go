@@ -76,8 +76,9 @@ func ListProjects(r Reader, split bool) ([]Project, error) {
 
 // CheckProjectName refuses a project name the compile refuses, every
 // instance of the project with it (compiler.CheckNamespace): not a
-// name, one okdp-compiler reserves (platform, kube-*, the deployer
-// engines' and the targets' namespaces) or one of the platform's,
+// name, one okdp-compiler reserves (platform, kube-*), one of the
+// deployer engines' and the targets' (the set of okdp-gitops,
+// rules.EngineNamespaces) or one of the platform's,
 // global.okdp.policy.reserved of platform.yaml as r holds it. The
 // refusal is a *CompileError, the compiler's message: the edit's fault.
 // A program that creates more of a project than the tree (its Namespace,

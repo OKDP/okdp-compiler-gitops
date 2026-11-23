@@ -18,6 +18,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/access"
 	"github.com/okdp/okdp-compiler-security/policy"
 	"github.com/okdp/okdp-compiler/chart"
 )
@@ -173,7 +174,7 @@ func loadProjects(ctx context.Context, repos []Repository, rules *compiler.RuleS
 		values, err := readProject(repo, file)
 		own = append(own, err)
 		readable := err == nil // its file reads and sets what level 1 may
-		var groups map[string]compiler.AccessRole
+		var groups map[string]access.Role
 		if readable {
 			if values != nil {
 				ls, err = ls.add(layer{level: 1, file: where(repo, file), values: values})
@@ -216,7 +217,8 @@ func loadProjects(ctx context.Context, repos []Repository, rules *compiler.RuleS
 		if r := refusal(project, own); r != nil {
 			r.Inputs = compiler.Inputs{Contracts: t.catalog.Contracts(), Values: slices.Clip(slices.Clone(platform.layers)), Namespace: project}
 			if readable {
-				r.Inputs.Values, r.Inputs.Settings, r.Own = slices.Clip(ls.layers), GroupsSettings(groups), true
+				r.Inputs, r.Own = withGroups(r.Inputs, groups), true
+				r.Inputs.Values = slices.Clip(ls.layers)
 			}
 			l.Refused = append(l.Refused, *r)
 			continue
@@ -252,7 +254,7 @@ func refusal(project string, errs []error) *Refused {
 // Without claimers in its InstanceFile, Inputs.Claimers is nil and the
 // package's claimers apply. The instance comes without its Definition
 // when its package already failed for an instance before it.
-func (t *parts) instance(ctx context.Context, repo Repository, project, name string, ls levels, groups map[string]compiler.AccessRole) (compiler.Instance, error) {
+func (t *parts) instance(ctx context.Context, repo Repository, project, name string, ls levels, groups map[string]access.Role) (compiler.Instance, error) {
 	dir := path.Join(ProjectsDir, project, InstancesDir, name)
 	if err := instanceFiles(repo, dir); err != nil {
 		return compiler.Instance{}, err
@@ -302,11 +304,12 @@ func (t *parts) instance(ctx context.Context, repo Repository, project, name str
 	if err != nil {
 		return compiler.Instance{}, err
 	}
-	in := withGroups(compiler.Inputs{Contracts: t.catalog.Contracts(), Values: slices.Clip(ls.layers), Release: ReleaseName(project, name), Namespace: project, Claimers: pkg.Claimers}, groups)
+	in := compiler.Inputs{Contracts: t.catalog.Contracts(), Values: slices.Clip(ls.layers), Release: ReleaseName(project, name), Namespace: project, Claimers: pkg.Claimers}
 	if values != nil {
 		errs = append(errs, checkConfig(where(repo, configFile), values, t.declared(pkg.Service, pkg.Version, def)))
 		in.Values = append(in.Values, values)
 	}
+	in = withGroups(in, groups)
 	if err := errors.Join(errs...); err != nil {
 		return compiler.Instance{}, err
 	}

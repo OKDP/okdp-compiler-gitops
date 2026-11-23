@@ -17,10 +17,10 @@ import (
 	"github.com/okdp/okdp-gitops/internal/outdir"
 )
 
-// TestMain: the test binary is also okdp-compile, the command of the
+// TestMain: the test binary is also okdp-gitops-compile, the command of the
 // scripts (TestScript).
 func TestMain(m *testing.M) {
-	testscript.Main(m, map[string]func(){"okdp-compile": main})
+	testscript.Main(m, map[string]func(){"okdp-gitops-compile": main})
 }
 
 // listFiles: the files under dir, path -> content.
@@ -177,7 +177,7 @@ func TestRunCheck(t *testing.T) {
 	}
 }
 
-// TestScript runs the scripts of testdata/cli: okdp-compile as a
+// TestScript runs the scripts of testdata/cli: okdp-gitops-compile as a
 // process, its exit status, stdout and stderr, $OKDP_CHARTS. A script
 // runs from the repository root, as the commands of the documentation,
 // with no $OKDP_* variable but those it sets; its files and outputs are

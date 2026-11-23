@@ -152,7 +152,7 @@ spec:
 // platform names a provider.
 func TestProjectManifests(t *testing.T) {
 	tg := Target{RepoURL: "https://x/tree.git"}
-	store := &compiler.SecretStore{Name: "platform", ServiceAccount: "okdp-secrets", Provider: map[string]any{"vault": map[string]any{"server": "https://vault.example.org"}}}
+	store := &target.Store{Name: "platform", ServiceAccount: "okdp-secrets", Provider: map[string]any{"vault": map[string]any{"server": "https://vault.example.org"}}}
 	got, err := tg.ProjectManifests(target.Project{Namespace: "demo", SecretStore: store})
 	if err != nil {
 		t.Fatal(err)
@@ -179,7 +179,7 @@ func TestProjectManifests(t *testing.T) {
 // Application, its sync wave after those of the releases it depends on,
 // and each project's manifests, marked generated.
 func TestFiles(t *testing.T) {
-	db := &compiler.Result{Namespace: "data", Release: "demo-db", Service: "db", Version: "1.0.0", Info: compiler.Info{Provides: []compiler.Output{{Name: "demo-db", Contract: "database"}}}, Privileged: true}
+	db := &compiler.Result{Namespace: "data", Release: "demo-db", Service: "db", Version: "1.0.0", Info: compiler.Info{Provides: []compiler.Output{{Name: "demo-db", Contract: "database"}}}, Settings: map[string]any{"policy": map[string]any{"privileged": []any{"data"}}}}
 	web := &compiler.Result{Namespace: "demo", Release: "demo-web", Service: "web", Version: "1.0.0", Dependencies: []compiler.Dependency{{Instance: "demo-db", Namespace: "data", Contract: "database", Field: "database", Output: "demo-db"}}}
 	results := []*compiler.Result{web, db}
 	g, err := tree.NewGraph(results)

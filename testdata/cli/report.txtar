@@ -1,12 +1,12 @@
 # --report: a JSON report of the compile, each instance, its status, its
 # claims, dependencies and charts, and the tree's errors; to stdout with
 # -, nothing else on it; written with --check, and when the compile fails.
-status 0 okdp-compile --repository examples/02_advanced/input/db --check --report -
+status 0 okdp-gitops-compile --repository examples/02_advanced/input/db --check --report -
 cmp stdout $WORK/advanced.json
 
 # A refused instance: its error, the others compiled, nothing written;
 # status 1, the report written all the same.
-status 1 okdp-compile --repository $WORK/tree -o $WORK/out --report $WORK/refused.json
+status 1 okdp-gitops-compile --repository $WORK/tree -o $WORK/out --report $WORK/refused.json
 ! stdout .
 stderr '^error: demo/demo-web: values don''t meet'
 cmp $WORK/refused.json $WORK/refused.golden
@@ -14,27 +14,27 @@ cmp $WORK/refused.json $WORK/refused.golden
 
 # Compiled and written: written true.
 rm $WORK/tree/projects/demo/instances/web/config.yaml
-status 0 okdp-compile --repository $WORK/tree -o $WORK/out --report $WORK/written.json
+status 0 okdp-gitops-compile --repository $WORK/tree -o $WORK/out --report $WORK/written.json
 grep '"status": "refused"' $WORK/refused.json
 ! grep '"status": "refused"' $WORK/written.json
 grep '^  "written": true$' $WORK/written.json
 
 # Past --timeout: every instance skipped, the timeout a tree error.
-status 1 okdp-compile --repository $WORK/tree -o $WORK/late --report $WORK/late.json --timeout 1ns
+status 1 okdp-gitops-compile --repository $WORK/tree -o $WORK/late --report $WORK/late.json --timeout 1ns
 grep '"status": "skipped"' $WORK/late.json
 ! grep '"status": "compiled"' $WORK/late.json
 grep '^    "the compile takes longer than --timeout 1ns: nothing written"$' $WORK/late.json
 
 # A tree that does not load: no instance, its error the tree's.
-status 1 okdp-compile --repository $WORK/nope --check --report -
+status 1 okdp-gitops-compile --repository $WORK/nope --check --report -
 cmpenv stdout $WORK/nope.golden
 
 # The report inside a repository, or the output's projects/: refused,
 # nothing written.
-status 1 okdp-compile --repository $WORK/tree --check --report $WORK/tree/report.json
+status 1 okdp-gitops-compile --repository $WORK/tree --check --report $WORK/tree/report.json
 stderr '^error: --report .*tree/report.json is inside .*tree: the command reads or owns it$'
 ! exists $WORK/tree/report.json
-status 1 okdp-compile --repository $WORK/tree -o $WORK/out --report $WORK/out/projects/report.json
+status 1 okdp-gitops-compile --repository $WORK/tree -o $WORK/out --report $WORK/out/projects/report.json
 stderr 'is inside .*out/projects: the command reads or owns it$'
 
 -- advanced.json --

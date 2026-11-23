@@ -37,7 +37,8 @@ func WithoutRender(charts *chartcheck.Charts) compiler.Finalize { return finaliz
 
 func finalize(charts *chartcheck.Charts, rendered bool) compiler.Finalize {
 	return func(ctx context.Context, in compiler.FinalInput) (map[string]map[string]any, map[string]chart.Ref, []string, error) {
-		check := policy.UpstreamCheck(ctx, in.Rules, in.Settings, in.Namespace, in.Privileged)
+		privileged := policy.Privileged(in.Settings, in.Namespace)
+		check := policy.UpstreamCheck(ctx, in.Rules, in.Settings, in.Namespace, privileged)
 		final, err := compiler.FinalValues(in, check)
 		if err != nil {
 			return nil, nil, nil, err
@@ -52,7 +53,7 @@ func finalize(charts *chartcheck.Charts, rendered bool) compiler.Finalize {
 		// What the charts a project gives upstream values to deploy. The
 		// compile then runs the rule set's finalValues hook on the values
 		// returned (the hosts of the charts' ingresses).
-		if !in.Privileged && rendered {
+		if !privileged && rendered {
 			if err := CheckRendered(ctx, charts, in, values); err != nil {
 				return nil, nil, nil, err
 			}
@@ -72,7 +73,9 @@ func finalize(charts *chartcheck.Charts, rendered bool) compiler.Finalize {
 // rendered): the chart of the key rendered with its final values, in the
 // instance's namespace, under its release (render.Objects), the manifests'
 // objects checked once, with the rule set's objects hook
-// (compiler.CheckObjects). A key whose chart could not be fetched
+// (compiler.CheckObjects), credentials in clear allowed: the rendered
+// output is never written, the values that give them are warned of
+// (policy.PlainUpstream). A key whose chart could not be fetched
 // refuses the instance alone (charts.Failed): what the check would read
 // does not exist, and tenant values cannot be vouched for. The objects
 // chart is the compiler's. No charts (nil), no render: unchecked as the
@@ -99,7 +102,7 @@ func CheckRendered(ctx context.Context, charts *chartcheck.Charts, in compiler.F
 			return fmt.Errorf("upstream.%s: rendering the chart %s with its final values: %w", key, spec.Source.ID(), err)
 		}
 		svc := "upstream." + key + " (rendered)"
-		if err := compiler.CheckObjects(ctx, in.Rules, svc, in.Namespace, in.Settings, objects); err != nil {
+		if err := compiler.CheckObjects(ctx, in.Rules, svc, in.Namespace, in.Settings, true, objects); err != nil {
 			return err
 		}
 	}

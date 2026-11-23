@@ -16,6 +16,7 @@ import (
 
 	"github.com/okdp/okdp-compiler/chart"
 
+	"github.com/okdp/okdp-compiler-security/access"
 	"github.com/okdp/okdp-compiler-security/policy"
 
 	"github.com/okdp/okdp-gitops/internal/chartcheck"
@@ -73,7 +74,7 @@ const (
 	DefaultFluxSource = flux.DefaultSource
 )
 
-// StaticCharts: a chart cache filled already, okdp-compile's --charts:
+// StaticCharts: a chart cache filled already, okdp-gitops-compile's --charts:
 // nothing pulled, a chart it lacks failing the check of the instance that
 // names it, with the command that pulls it.
 func StaticCharts(fsys fs.FS) ChartSource { return chartcheck.Static(fsys) }
@@ -205,7 +206,7 @@ func Write(res *compiler.Result) (map[string][]byte, error) { return helm.WriteV
 // (tree.ProjectAccess, its default group an editor), for a program that
 // mirrors the project's authority. set is the rule set it compiles with;
 // nil, the standard one, as Build.
-func ProjectAccess(set *compiler.RuleSet, file []byte, namespace string) (map[string]compiler.AccessRole, error) {
+func ProjectAccess(set *compiler.RuleSet, file []byte, namespace string) (map[string]access.Role, error) {
 	set = rules.Or(set)
 	if err := compiler.CheckNamespace(context.Background(), set, namespace, nil); err != nil {
 		return nil, err

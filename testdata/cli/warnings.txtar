@@ -1,17 +1,17 @@
 # A values.yaml that holds an expression: compiled all the same, status 0,
 # the warning on stderr, once, after the instance's namespace and release,
 # and the outputs written.
-status 0 okdp-compile --repository $WORK/tree -o $WORK/files
+status 0 okdp-gitops-compile --repository $WORK/tree -o $WORK/files
 ! stdout .
 cmp stderr $WORK/warning.txt
 grep '^  message: Hello from demo-hello$' $WORK/files/projects/demo/instances/demo-hello/values.yaml
 
 # Named values.cel.yaml: no warning. Both files: an error, nothing written.
 mv $WORK/tree/catalog/hello/1.0.0/values.yaml $WORK/tree/catalog/hello/1.0.0/values.cel.yaml
-status 0 okdp-compile --repository $WORK/tree -o $WORK/cel
+status 0 okdp-gitops-compile --repository $WORK/tree -o $WORK/cel
 ! stderr .
 cp $WORK/tree/catalog/hello/1.0.0/values.cel.yaml $WORK/tree/catalog/hello/1.0.0/values.yaml
-status 1 okdp-compile --repository $WORK/tree -o $WORK/both
+status 1 okdp-gitops-compile --repository $WORK/tree -o $WORK/both
 stderr 'values.yaml and values.cel.yaml: a package has one of them$'
 ! exists $WORK/both
 

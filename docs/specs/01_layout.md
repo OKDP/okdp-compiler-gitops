@@ -66,10 +66,12 @@ read for the compile of the instances it is for:
   `okdp-project-<project>` is an editor (`tree.DefaultProjectGroup`);
   `{}`, no group. No other file gives it, and no instance receives it
   as a value: the tree gives it every instance of the project as its
-  groups, the setting `global.okdp.access.groups` in the compiler's
-  host settings (`tree.GroupsSettings`, `Inputs.Settings`), which no
-  chart receives and a mapping reads in `platform.access`, and the
-  targets write it as the Argo CD roles of the project's
+  groups, the security set's `global.okdp.access.groups`, in the
+  compiler's host settings, beside the files' layers
+  (`tree.GroupsSettings`, `compiler.Inputs.Settings`; a mapping reads
+  them in `platform.access`, and no chart receives them: a change of a
+  project's access changes no instance's values), and the targets
+  write it as the Argo CD roles of the project's
   AppProject and the RoleBindings of its namespace ([the
   output](03_output.md)). Whoever writes `project.yaml` sets it: in a
   repository of its own (the split topology), its writers, the
@@ -128,7 +130,9 @@ before any instance compiles. A project without instances is checked
 alike. Then the layers are given to the compiler in their order:
 `platform.yaml`, `project.yaml` (without its `description` and its
 `access`), the instance's `connections.yaml`, its `config.yaml`; an
-absent file gives none.
+absent file gives none. Beside them, the tree's own settings
+(`compiler.Inputs.Settings`): the roles of the project's groups, its
+`access`, as `global.okdp.access.groups`, which no chart receives.
 
 - A level adds values and changes none a lower level sets, even to the
   same value, a null included: a file of level 1 or 2 refused for a
@@ -149,8 +153,10 @@ absent file gives none.
   field problem at `global.<key>` (`compiler.FieldErrors`), privileged
   project or not.
 - `platform.yaml` declares no named claim; `access` is `project.yaml`'s
-  alone, and so is `global.okdp.access.groups`, which the tree gives:
-  `platform.yaml` does not set it.
+  alone, and `platform.yaml` sets no `global.okdp.access.groups`: the
+  groups of a namespace are its project's, which the tree gives. The
+  compiler would refuse it too, a layer giving a setting the tree's own
+  settings give; the tree names the file first.
 - Only `platform.yaml` gives template code (`{{`), reviewed with the
   platform: under no key of a project's file nor of an instance's.
 - A connection above level 0 whose credentials are in the platform's
@@ -277,7 +283,7 @@ commits](04_topology.md#the-control-planes-commits)):
 |---|---|
 | a project | `projects/<p>/project.yaml`; its description is its key `description`, first when new, the project's own: `tree.Load` leaves it out of the values of the project's instances (`tree.ProjectDescription`). In a split topology, the project's repository first (Forgejo, named after the projects url, without a workflow), then its entry of `projects.yaml` |
 | an instance | `instance.yaml` (`service`, `version`, and `claimers` as read: absent, `[]` or listed, `treeedit.Instance.Claimers`) and `config.yaml` (its values; none when it has none), each only when its content changes, so that a hand-written file keeps its comments |
-| a connection | the entry `connections.<name>` of `project.yaml`, or of `platform.yaml` for a platform connection, as okdp-compiler writes a `compiler.Connection`: `contract`, `description`, `secretRef`, then the contract's fields, sorted |
+| a connection | the entry `connections.<name>` of `project.yaml`, or of `platform.yaml` for a platform connection, as `treeedit` writes a `compiler.Connection`: `contract`, `description`, `secretRef`, then the contract's fields, sorted |
 | a named claim | the entry `claims.<name>` of `project.yaml`, a `compiler.ClaimSpec`: `contract`, `class` or `provider`, `request` |
 | the catalog list | `catalogs.yaml`, key by key: the keys that do not change keep their nodes and their comments; a file the compile would refuse is not written ([catalogs.yaml](#catalogsyaml)) |
 

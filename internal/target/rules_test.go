@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/access"
 	"github.com/okdp/okdp-gitops/internal/rulestest"
 	"github.com/okdp/okdp-gitops/internal/target"
 	"github.com/okdp/okdp-gitops/internal/target/argocd"
@@ -12,10 +13,9 @@ import (
 )
 
 // TestProjectRoles: the manifests of a project hold the roles of its
-// groups (tree.Groups, Inputs.Settings), whatever rule set it compiles
-// with.
+// groups (tree.Groups), whatever rule set it compiles with.
 func TestProjectRoles(t *testing.T) {
-	in := compiler.Inputs{Rules: rulestest.Added(t), Namespace: "demo", Settings: tree.GroupsSettings(map[string]compiler.AccessRole{"ops": compiler.AccessViewer})}
+	in := compiler.Inputs{Rules: rulestest.Added(t), Namespace: "demo", Settings: tree.GroupsSettings(map[string]access.Role{"ops": access.Viewer})}
 	p, err := target.ProjectOf(in)
 	if err != nil {
 		t.Fatal(err)

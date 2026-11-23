@@ -24,13 +24,13 @@ import (
 // DefaultInstanceTimeout bounds the compile of one instance (the CI compile
 // and the control plane's): past it the instance is refused and the others
 // compiled, a package's expressions or a chart's render bounded per
-// instance, not only by the run's --timeout. okdp-compile's --instance-timeout
-// default.
+// instance, not only by the run's --timeout. okdp-gitops-compile's
+// --instance-timeout default.
 const DefaultInstanceTimeout = time.Minute
 
 // DefaultCostLimit bounds the CEL cost of the compile of one instance
 // (compiler.Inputs.CostLimit): the server compiles packages it does not
-// review, on values an instance gives. It is okdp-compile's default
+// review, on values an instance gives. It is okdp-gitops-compile's default
 // (compiler.DefaultCostLimit).
 const DefaultCostLimit = compiler.DefaultCostLimit
 

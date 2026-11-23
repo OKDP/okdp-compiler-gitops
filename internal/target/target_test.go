@@ -19,6 +19,7 @@ import (
 	"testing/fstest"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/access"
 	"github.com/okdp/okdp-gitops/internal/target"
 	"github.com/okdp/okdp-gitops/internal/target/argocd"
 	"github.com/okdp/okdp-gitops/internal/target/flux"
@@ -65,8 +66,8 @@ var platform = map[string]any{"global": map[string]any{"okdp": map[string]any{
 // them from its file: demo's, its default group an editor among them;
 // data's file gives none, the default.
 var groups = target.ProjectGroups{
-	"demo": {"okdp-project-demo": compiler.AccessEditor, "demo-leads": compiler.AccessAdmin, "auditors": compiler.AccessViewer, "analysts": compiler.AccessViewer},
-	"data": {tree.DefaultProjectGroup("data"): compiler.AccessEditor},
+	"demo": {"okdp-project-demo": access.Editor, "demo-leads": access.Admin, "auditors": access.Viewer, "analysts": access.Viewer},
+	"data": {tree.DefaultProjectGroup("data"): access.Editor},
 }
 
 // compiled: three instances, compiled with platform, and their graph:
@@ -79,7 +80,7 @@ func compiled(t *testing.T) ([]*compiler.Result, *tree.Graph) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return compiler.Instance{Definition: def, Inputs: compiler.Inputs{Rules: rules.Standard(), Finalize: helmvalues.New(nil), Contracts: contracts, Values: []map[string]any{platform, values}, Release: release, Namespace: namespace, Settings: tree.GroupsSettings(groups[namespace])}}
+		return compiler.Instance{Definition: def, Inputs: compiler.Inputs{Rules: rules.Standard(), Finalize: helmvalues.New(nil), Contracts: contracts, Values: []map[string]any{platform, values}, Settings: tree.GroupsSettings(groups[namespace]), Release: release, Namespace: namespace}}
 	}
 	var results []*compiler.Result
 	for _, o := range compiler.CompileAll(context.Background(), []compiler.Instance{
@@ -178,23 +179,28 @@ func TestOptions(t *testing.T) {
 }
 
 // TestProjects: a project per namespace of the results, in namespace
-// order, privileged when any of its results is, its secret store the
-// first set, the roles of its groups those given for its namespace, none
-// without.
+// order, privileged when the settings of any of its results say so
+// (global.okdp.policy.privileged), its secret store the
+// first set, of its settings, its ServiceAccount defaulted, the roles of
+// its groups those given for its namespace, none without.
 func TestProjects(t *testing.T) {
-	store := &compiler.SecretStore{Name: "platform", ServiceAccount: "okdp-secrets", Provider: map[string]any{"fake": map[string]any{}}}
-	demo := map[string]compiler.AccessRole{"devs": compiler.AccessEditor}
-	got := target.Projects([]*compiler.Result{
+	store := &target.Store{Name: "platform", ServiceAccount: "okdp-secrets", Provider: map[string]any{"fake": map[string]any{}}}
+	settings := map[string]any{"secrets": map[string]any{"store": "platform", "provider": map[string]any{"fake": map[string]any{}}}, "policy": map[string]any{"privileged": []any{"data", "demo"}}}
+	demo := map[string]access.Role{"devs": access.Editor}
+	got, err := target.Projects([]*compiler.Result{
 		{Namespace: "demo", Release: "demo-web"},
-		{Namespace: "data", Release: "data-db", Privileged: true, SecretStore: store},
-		{Namespace: "demo", Release: "demo-db", Privileged: true, SecretStore: store},
-	}, target.ProjectGroups{"demo": demo, "other": {"ops": compiler.AccessAdmin}})
+		{Namespace: "data", Release: "data-db", Settings: settings},
+		{Namespace: "demo", Release: "demo-db", Settings: settings},
+	}, target.ProjectGroups{"demo": demo, "other": {"ops": access.Admin}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := []target.Project{{Namespace: "data", Privileged: true, SecretStore: store}, {Namespace: "demo", Privileged: true, SecretStore: store, Access: target.ProjectAccess{Groups: demo}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
-	if got := target.Projects(nil, nil); got != nil {
-		t.Errorf("no result: %v", got)
+	if got, err := target.Projects(nil, nil); got != nil || err != nil {
+		t.Errorf("no result: %v %v", got, err)
 	}
 }
 
@@ -295,7 +301,7 @@ spec:
           role: 'okdp: x'
       server: https://vault.example.org
 `
-	store := &compiler.SecretStore{Name: "platform", ServiceAccount: "okdp-secrets", Provider: map[string]any{"vault": map[string]any{"server": "https://vault.example.org", "auth": map[string]any{"kubernetes": map[string]any{"role": "okdp: x"}}}}}
+	store := &target.Store{Name: "platform", ServiceAccount: "okdp-secrets", Provider: map[string]any{"vault": map[string]any{"server": "https://vault.example.org", "auth": map[string]any{"kubernetes": map[string]any{"role": "okdp: x"}}}}}
 	got, err := target.SecretStore(target.Project{Namespace: "demo", SecretStore: store})
 	if err != nil || string(got) != want {
 		t.Errorf("got %v:\n%s", err, got)
@@ -338,7 +344,7 @@ func TestReleases(t *testing.T) {
 // objects in is refused, by the flux target (okdp-releases, its Source's
 // namespace) and the argocd target (argocd), one error per namespace;
 // the namespaces the targets write in by default are those the compile
-// reserves (compiler.EngineNamespaces), so that the compile refuses them
+// reserves (rules.EngineNamespaces), so that the compile refuses them
 // first.
 func TestOwnNamespaces(t *testing.T) {
 	g, err := tree.NewGraph(nil)
@@ -362,8 +368,8 @@ func TestOwnNamespaces(t *testing.T) {
 	}
 	source, _, _ := strings.Cut(flux.DefaultSource, "/")
 	for _, ns := range []string{flux.ReleasesNamespace, source, argocd.Namespace} {
-		if !slices.Contains(compiler.EngineNamespaces(rules.Standard()), ns) {
-			t.Errorf("%s: a target's namespace the compile does not reserve (compiler.EngineNamespaces)", ns)
+		if !slices.Contains(rules.EngineNamespaces(rules.Standard()), ns) {
+			t.Errorf("%s: a target's namespace the compile does not reserve (rules.EngineNamespaces)", ns)
 		}
 	}
 }
@@ -372,12 +378,12 @@ func TestOwnNamespaces(t *testing.T) {
 // name order, prefixed; none, and no AppProject role, when no group has
 // a role (access: {}).
 func TestAccess(t *testing.T) {
-	p := target.Project{Namespace: "demo", Access: target.ProjectAccess{Groups: map[string]compiler.AccessRole{"b": compiler.AccessAdmin, "a": compiler.AccessAdmin}, GroupPrefix: "oidc:"}}
+	p := target.Project{Namespace: "demo", Access: target.ProjectAccess{Groups: map[string]access.Role{"b": access.Admin, "a": access.Admin}, GroupPrefix: "oidc:"}}
 	got := string(target.Access(p))
 	if !strings.Contains(got, "name: okdp-access-admin\n") || !strings.Contains(got, "kind: ClusterRole\n  name: admin\n") || strings.Index(got, `"oidc:a"`) > strings.Index(got, `"oidc:b"`) || strings.Contains(got, "---") {
 		t.Errorf("Access:\n%s", got)
 	}
-	p.Access.Groups = map[string]compiler.AccessRole{}
+	p.Access.Groups = map[string]access.Role{}
 	if b := target.Access(p); b != nil {
 		t.Errorf("no group: %s", b)
 	}
@@ -425,7 +431,7 @@ func TestControlPlane(t *testing.T) {
 // the instances previous holds, their dependsOn kept, their identity
 // today's.
 func TestKept(t *testing.T) {
-	p := target.Project{Namespace: "demo", Access: target.ProjectAccess{Groups: map[string]compiler.AccessRole{"okdp-project-demo": compiler.AccessEditor}}}
+	p := target.Project{Namespace: "demo", Access: target.ProjectAccess{Groups: map[string]access.Role{"okdp-project-demo": access.Editor}}}
 	previous := map[string][]byte{
 		"projects/demo/instances/demo-web/helmrelease.yaml": []byte("spec:\n  dependsOn:\n    - name: demo-db\n"),
 		"projects/demo/instances/demo-web/Chart.yaml":       []byte("old\n"),
@@ -482,12 +488,15 @@ func TestNetworkPolicy(t *testing.T) {
 		}
 		return out
 	}
-	ps := target.Projects([]*compiler.Result{
+	ps, err := target.Projects([]*compiler.Result{
 		{Namespace: "data", Release: "data-a", Settings: net, Claims: of("web", "demo")},
 		{Namespace: "data", Release: "data-b", Settings: net, Claims: of("demo", "data", "monitoring")},
-		{Namespace: "ops", Release: "ops-x", Privileged: true, Settings: net, Claims: of("demo")},
+		{Namespace: "ops", Release: "ops-x", Settings: privileged(net, "ops"), Claims: of("demo")},
 		{Namespace: "web", Release: "web-x"},
 	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got := ps[0].Network.Claimers; !slices.Equal(got, []string{"demo", "monitoring", "web"}) {
 		t.Errorf("claimers: %v", got)
 	}
@@ -523,4 +532,12 @@ spec:
 	if np := string(target.NetworkPolicy(target.Project{Namespace: "x", Network: &target.Network{}})); strings.Contains(np, "namespaceSelector") || !strings.Contains(np, "podSelector: {}") {
 		t.Errorf("no namespace allowed:\n%s", np)
 	}
+}
+
+// privileged: settings, with namespace one of the platform's own projects
+// (global.okdp.policy.privileged).
+func privileged(settings map[string]any, namespace string) map[string]any {
+	out := maps.Clone(settings)
+	out["policy"] = map[string]any{"privileged": []any{namespace}}
+	return out
 }

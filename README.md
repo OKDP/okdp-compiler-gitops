@@ -23,7 +23,7 @@ Three ways to use it:
 
 - `okdp-gitops`, the binary of the output's CI: it compiles the Git
   repositories of a topology and commits the output;
-- `okdp-compile`, the binary that compiles local directories for one
+- `okdp-gitops-compile`, the binary that compiles local directories for one
   target and touches no Git repository: for a catalog's CI, a person
   writing a package, or a plain `helm install`;
 - the Go library (`github.com/okdp/okdp-gitops`), for
@@ -96,13 +96,13 @@ okdp-gitops: up to date
 Exit status: 0 up to date or written, 1 problems or stale files, 2 usage
 ([usage](docs/01_usage.md#compile)).
 
-`okdp-compile` compiles the same tree from local directories and writes
+`okdp-gitops-compile` compiles the same tree from local directories and writes
 the files of one target:
 
 ```text
-okdp-compile --repository <dir>... [--catalog <dir>]... -o <dir>
-             [--target helm|umbrella|flux|argocd]
-okdp-compile --check [--charts <dir>] --repository <dir>... [--catalog <dir>]...
+okdp-gitops-compile --repository <dir>... [--catalog <dir>]... -o <dir>
+                    [--target helm|umbrella|flux|argocd]
+okdp-gitops-compile --check [--charts <dir>] --repository <dir>... [--catalog <dir>]...
 ```
 
 | `--target` | Deployed as |
@@ -112,7 +112,7 @@ okdp-compile --check [--charts <dir>] --repository <dir>... [--catalog <dir>]...
 | `flux` | the umbrella, with its HelmRelease and Kustomization |
 | `argocd` | the umbrella, with its Application |
 
-([okdp-compile](docs/01_usage.md#okdp-compile))
+([okdp-gitops-compile](docs/01_usage.md#okdp-gitops-compile))
 
 ## The CI of the output
 
@@ -139,12 +139,12 @@ output repository and read access to the sources
 | `gitops` | the stores and the topologies, the compile of the tree, the commits of the control plane's edits, the output written to Git, the workflow |
 | `catalog` | the catalog repositories, fetched from Git |
 | `deploy` | `Build`, the compile with the rules, the policy and the checks against the charts; the targets |
-| `rules` | `Standard`, the compiler's mandatory rule set with the security set added |
+| `rules` | `Standard`, the compiler's mandatory rule set with the security set and okdp-gitops' own set added (`FS`, `rules/set`) |
 | `tree` | the tree loaded (`Load`, the repositories and their roles, `catalogs.yaml`), compiled together (`Compile`, `Build`) and ordered (`Graph`); the projects kept (`Partial`) |
 | `treeedit` | the tree read, and its edits, each with its check |
 | `chartcache` | the chart cache: the upstream charts pulled from OCI registries and https repositories |
 
-`examples/` holds six trees and what `okdp-compile` writes of them;
+`examples/` holds six trees and what `okdp-gitops-compile` writes of them;
 `testdata/`, a tree, its catalog and the fixtures
 ([Go library](docs/01_usage.md#go-library)).
 
@@ -162,7 +162,7 @@ Go 1.27 or later.
 
 ```bash
 make build            # bin/okdp-gitops
-make build-compile    # bin/okdp-compile
+make build-compile    # bin/okdp-gitops-compile
 make check            # what CI runs: gofmt, vet, lint, tidy, build, race tests
 make help             # every target
 docker build -t okdp-gitops .

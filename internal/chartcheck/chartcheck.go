@@ -22,6 +22,7 @@ import (
 	"path"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 
 	helmchart "helm.sh/helm/v3/pkg/chart"
@@ -52,7 +53,7 @@ type Source interface {
 	FS() fs.FS
 }
 
-// Static is a chart cache filled already, okdp-compile's --charts: it
+// Static is a chart cache filled already, okdp-gitops-compile's --charts: it
 // pulls nothing. Get says nothing of a chart it lacks: its check fails,
 // with the command that pulls it (chartdir.Pull).
 func Static(fsys fs.FS) Source { return static{fsys} }
@@ -191,10 +192,33 @@ func (c *Charts) Check(ctx context.Context, final compiler.FinalValuesOf) ([]str
 		violations[key+" ("+ref.ID()+")"] = bad
 		warnings = append(warnings, w...)
 	}
-	if err := chart.SchemaError("compiled values", violations); err != nil {
+	if err := SchemaError("compiled values", violations); err != nil {
 		return nil, err
 	}
 	return warnings, nil
+}
+
+// SchemaError builds the error Helm reports when values violate the
+// schemas of their charts, nil when none does. violations maps each chart
+// to its violations ("" when it has none). what names the values checked
+// ("values", "compiled values").
+func SchemaError(what string, violations map[string]string) error {
+	charts := make([]string, 0, len(violations))
+	for c, v := range violations {
+		if v != "" {
+			charts = append(charts, c)
+		}
+	}
+	if len(charts) == 0 {
+		return nil
+	}
+	slices.Sort(charts)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s don't meet the specifications of the schema(s) in the following chart(s):", what)
+	for _, c := range charts {
+		fmt.Fprintf(&sb, "\n%s:\n%s", c, violations[c])
+	}
+	return errors.New(sb.String())
 }
 
 // upstream is what a check reads of an upstream chart. Its schema is

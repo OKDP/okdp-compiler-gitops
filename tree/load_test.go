@@ -11,6 +11,7 @@ import (
 	"testing/fstest"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/access"
 )
 
 // file: a file of a tree.
@@ -50,17 +51,20 @@ func split(prefixes ...string) fstest.MapFS {
 
 // summary: what Load gives, by instance: its namespace and release, its
 // name, its package, the keys of each of its values layers, in order, its
-// groups, its claimers when it has some.
+// groups, its settings (GroupsSettings), its claimers when it has some.
 func summary(t *testing.T, instances []compiler.Instance) []string {
 	t.Helper()
 	var got []string
 	for _, inst := range instances {
 		in := inst.Inputs
 		s := in.Namespace + "/" + in.Release + " (" + inst.Name + ") " + inst.Definition.Chart.Name + "-" + inst.Definition.Chart.Version
-		for _, v := range in.Values {
+		layers, groups := in.Values, Groups(in)
+		if !reflect.DeepEqual(in.Settings, GroupsSettings(groups)) {
+			t.Errorf("%s: the settings are not the groups': %v", in.Release, in.Settings)
+		}
+		for _, v := range layers {
 			s += " " + strings.Join(slices.Sorted(maps.Keys(v)), ",")
 		}
-		groups := Groups(in)
 		for _, g := range slices.Sorted(maps.Keys(groups)) {
 			s += " " + g + "=" + string(groups[g])
 		}
@@ -345,10 +349,10 @@ func TestLoadProjects(t *testing.T) {
 		t.Errorf("refused: got %q, want %q", names, want)
 	}
 	in := l.Refused[2].Inputs
-	if len(l.Refused[0].Inputs.Values) != 1 || l.Refused[0].Inputs.Settings != nil {
+	if len(l.Refused[0].Inputs.Values) != 1 || Groups(l.Refused[0].Inputs) != nil {
 		t.Errorf("broken's inputs: the platform's layer alone, no group: %+v", l.Refused[0].Inputs)
 	}
-	if in.Namespace != "stray" || len(in.Values) != 2 || in.Values[1]["global"] == nil || Groups(in)["okdp-project-stray"] != compiler.AccessEditor {
+	if in.Namespace != "stray" || len(in.Values) != 2 || in.Values[1]["global"] == nil || Groups(in)["okdp-project-stray"] != access.Editor {
 		t.Errorf("stray's inputs: %+v", in)
 	}
 	if got := l.Refused[2].Problems; len(got) != 1 || !strings.HasPrefix(got[0], "db/projects/stray/instances/b/values.yaml: not a file of an instance") {

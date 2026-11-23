@@ -96,7 +96,7 @@ without compiling again.
 
 `okdp-gitops compile` writes the output project by project
 (`Deployments.WriteCompiled`, `deploy.TreeFiles`), the rule
-`tree.Partial`, the same as `okdp-compile --partial`: a project whose instances all compile is written. A project
+`tree.Partial`, the same as `okdp-gitops-compile --partial`: a project whose instances all compile is written. A project
 of an instance refused, or of a problem of the graph of its own at its
 release (a cycle, a release that does not provide what is referenced),
 keeps its output as it was, the files the output repository has of it

@@ -1,0 +1,6 @@
+# Hook namespace: a namespace of a deployer engine, or one its target
+# writes in (engineNamespaces): a project's releases there would drive the
+# engine. Input: field, ns, settings.
+errors:
+  - $if: ${{ ns in sets.engineNamespaces }}
+    $value: "${{ field }} ${{ quote(ns) }}: the namespace is reserved: a deployer engine's, or the namespace its target writes in (${{ tables.engineNamespaces.join(', ') }}): a project's releases there would drive the engine"

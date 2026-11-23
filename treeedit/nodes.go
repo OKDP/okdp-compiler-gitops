@@ -29,7 +29,7 @@ func node(value any) (*yaml.Node, error) {
 // its key key set to value, or removed when value is nil
 // (connections.<name>, claims.<name>): its head, its comments and its
 // other keys kept, an entry replaced keeping its comments, a key left
-// empty removed. value is anything yaml v3 encodes (a compiler.Connection,
+// empty removed. value is anything yaml v3 encodes (a connection's entry,
 // a compiler.ClaimSpec); removing an entry that is not there changes
 // nothing. file names the file in messages.
 func EditEntry(raw []byte, file, key, name string, value any) ([]byte, error) {

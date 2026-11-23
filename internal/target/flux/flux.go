@@ -12,7 +12,6 @@ package flux
 import (
 	"github.com/okdp/okdp-gitops/tree"
 
-	"context"
 	"fmt"
 	"maps"
 	"path"
@@ -23,8 +22,8 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/policy"
 	"github.com/okdp/okdp-compiler/chart"
-	"github.com/okdp/okdp-compiler/value"
 	"github.com/okdp/okdp-gitops/internal/target"
 	"github.com/okdp/okdp-gitops/internal/target/helm"
 	"github.com/okdp/okdp-gitops/rules"
@@ -75,7 +74,7 @@ const ConfigMapMax = 1 << 20
 type Target struct {
 	Source     string             // the GitRepository the HelmReleases read the charts from, <namespace>/<name>; DefaultSource when empty
 	PathPrefix string             // the path of the tree in that repository, "" its root
-	Keep       []string           // namespaces the root Kustomization lists though no result is given: projects whose directories the output keeps as they are, not written (okdp-compile --partial)
+	Keep       []string           // namespaces the root Kustomization lists though no result is given: projects whose directories the output keeps as they are, not written (okdp-gitops-compile --partial)
 	Charts     helm.ChartArchives // the charts of each umbrella vendored (helm.Vendor); nil, none
 }
 
@@ -133,13 +132,17 @@ func (t Target) Files(results []*compiler.Result, g *tree.Graph, groups target.P
 		for _, n := range g.DependsOn(tree.GraphNode{Namespace: res.Namespace, Release: res.Release}) {
 			dependsOn = append(dependsOn, n.Release)
 		}
-		for name, data := range t.Instance(res.Namespace, res.Release, path.Join(t.PathPrefix, dir), dependsOn, res.Privileged) {
+		for name, data := range t.Instance(res.Namespace, res.Release, path.Join(t.PathPrefix, dir), dependsOn, policy.Privileged(res.Settings, res.Namespace)) {
 			files[path.Join(dir, name)] = append([]byte(target.Generated), data...)
 		}
 		instances[res.Namespace] = append(instances[res.Namespace], path.Join("instances", res.Release))
 	}
+	projects, err := target.Projects(results, groups)
+	if err != nil {
+		return nil, err
+	}
 	var namespaces []string
-	for _, p := range target.Projects(results, groups) {
+	for _, p := range projects {
 		manifests, err := t.ProjectManifests(p)
 		if err != nil {
 			return nil, err
@@ -265,17 +268,14 @@ func (t Target) ProjectManifests(p target.Project) (map[string][]byte, error) {
 // ServiceAccount: the ServiceAccountFile of p, not marked: the
 // ServiceAccount ServiceAccountName of ReleasesNamespace, which
 // helm-controller impersonates for the project's releases (Instance), the
-// Role RoleName of the project's namespace, the rule set's document
-// deployerRole (explicit API groups, no engine's: RBAC has no negation, and
-// no Flux or Argo CD object of the project is creatable; the platform adds
-// groups, global.okdp.policy.projectApiGroups), and the RoleBinding of the
+// Role RoleName of the project's namespace, of deployerRules (explicit API
+// groups, no engine's: RBAC has no negation, and no Flux or Argo CD object
+// of the project is creatable; the platform adds groups,
+// global.okdp.policy.projectApiGroups), and the RoleBinding of the
 // one to the other: a cluster-scoped object, or one of another namespace,
 // is refused by the API server.
 func ServiceAccount(p target.Project) ([]byte, error) {
-	rules, err := deployerRules(p.APIGroups)
-	if err != nil {
-		return nil, err
-	}
+	rules := deployerRules(p.APIGroups)
 	namespace := p.Namespace
 	var l target.Lines
 	l.Add("apiVersion: v1")
@@ -321,33 +321,64 @@ func ServiceAccount(p target.Project) ([]byte, error) {
 // roleRule: a rule of a Role, each field a YAML flow list.
 type roleRule struct{ apiGroups, resources, verbs string }
 
-// deployerRules: the rules of the standard rule set's document
-// deployerRole, the platform's groups added.
-func deployerRules(added []string) ([]roleRule, error) {
-	groups := make([]any, len(added))
-	for i, g := range added {
-		groups[i] = g
-	}
-	values, err := rules.Standard().Values(context.Background(), "deployerRole", map[string]any{"items": groups})
-	if err != nil {
-		return nil, fmt.Errorf("the rule set's deployerRole: %w", err)
-	}
-	var out []roleRule
-	for _, r := range value.AsList(values["rules"]) {
-		m := value.AsMap(r)
-		out = append(out, roleRule{flow(m["apiGroups"]), flow(m["resources"]), flow(m["verbs"])})
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("the rule set's deployerRole gives no rule")
-	}
-	return out, nil
+// deployerAPIGroups: the API groups of the Role a project's releases are
+// installed with, every verb on every resource of each: the core group,
+// workloads, networking and the operators the packages render objects of
+// (every apiVersion of their templates, grepped). RBAC has no negation,
+// so the list is explicit and leaves the engines' groups out: they let a
+// project drive the engine with the engine's identity.
+var deployerAPIGroups = []string{
+	"",
+	"apps",
+	"batch",
+	"autoscaling",
+	"policy",
+	"networking.k8s.io",
+	"discovery.k8s.io",
+	"coordination.k8s.io",
+	"external-secrets.io",
+	"generators.external-secrets.io",
+	"cert-manager.io",
+	"monitoring.coreos.com",
+	"gateway.networking.k8s.io",
+	"postgresql.cnpg.io",
+	"kafka.strimzi.io",
+	"k8ssandra.io",
+	"medusa.k8ssandra.io",
+	"reaper.k8ssandra.io",
+	"cassandra.datastax.com",
+	"nifi.konpyutaika.com",
+	"sparkoperator.k8s.io",
 }
 
-// flow: the strings of v, a list, as one YAML flow list, double quoted.
-func flow(v any) string {
-	var q []string
-	for _, x := range value.AsList(v) {
-		q = append(q, strconv.Quote(value.Str(x)))
+// engineAPIGroups: the table of the standard rule set that lists the API
+// groups of the deployer engines' custom resources.
+const engineAPIGroups = "deployerApiGroups"
+
+// deployerRules: the rules of the Role a project's releases are installed
+// with: every verb on every resource of deployerAPIGroups and of the
+// groups the platform adds (added), but "*", the engines' groups
+// (engineAPIGroups) and those already listed; and the RBAC of its
+// namespace, without escalate nor bind.
+func deployerRules(added []string) []roleRule {
+	groups := slices.Clone(deployerAPIGroups)
+	engines := rules.Standard().List(engineAPIGroups)
+	for _, g := range added {
+		if g != "*" && !slices.Contains(engines, g) && !slices.Contains(deployerAPIGroups, g) {
+			groups = append(groups, g)
+		}
+	}
+	return []roleRule{
+		{flow(groups...), flow("*"), flow("*")},
+		{flow("rbac.authorization.k8s.io"), flow("roles", "rolebindings"), flow("get", "list", "watch", "create", "update", "patch", "delete", "deletecollection")},
+	}
+}
+
+// flow: strings as one YAML flow list, double quoted.
+func flow(vs ...string) string {
+	q := make([]string, len(vs))
+	for i, x := range vs {
+		q[i] = strconv.Quote(x)
 	}
 	return "[" + strings.Join(q, ", ") + "]"
 }

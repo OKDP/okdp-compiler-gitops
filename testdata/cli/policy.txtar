@@ -1,14 +1,14 @@
 # The platform's policy: an instance of a project that is not privileged
 # (global.okdp.policy.privileged) installs no cluster-scoped object and
 # writes no other namespace. The compile is refused, nothing written.
-status 1 okdp-compile --repository $WORK/tree -o $WORK/files
+status 1 okdp-gitops-compile --repository $WORK/tree -o $WORK/files
 ! stdout .
 cmp stderr $WORK/cluster-role.txt
 ! exists $WORK/files
 
 # The same package in a privileged project, the platform's own: its objects
 # are written as computed.
-status 0 okdp-compile --repository $WORK/priv -o $WORK/files
+status 0 okdp-gitops-compile --repository $WORK/priv -o $WORK/files
 ! stdout .
 ! stderr .
 grep 'kind: ClusterRole' $WORK/files/projects/infra/instances/infra-web/okdp-objects.values.yaml
@@ -16,7 +16,7 @@ rm $WORK/files
 
 # An object of another namespace, whatever its kind: an ExternalSecret
 # there would read that namespace's keys with its SecretStore's identity.
-status 1 okdp-compile --repository $WORK/other -o $WORK/files
+status 1 okdp-gitops-compile --repository $WORK/other -o $WORK/files
 ! stdout .
 cmp stderr $WORK/other-namespace.txt
 ! exists $WORK/files
@@ -24,34 +24,34 @@ cmp stderr $WORK/other-namespace.txt
 # A package schema that declares global.okdp is refused: its defaults
 # would bypass what each file of the tree may set and set the platform's
 # settings.
-status 1 okdp-compile --repository $WORK/schema-okdp -o $WORK/files
+status 1 okdp-gitops-compile --repository $WORK/schema-okdp -o $WORK/files
 ! stdout .
 cmp stderr $WORK/schema-okdp.txt
 ! exists $WORK/files
 
 # A package schema whose default of global gives okdp is refused too: the
 # outermost default on a path is the whole of global's, okdp included.
-status 1 okdp-compile --repository $WORK/schema-default -o $WORK/files
+status 1 okdp-gitops-compile --repository $WORK/schema-default -o $WORK/files
 ! stdout .
 cmp stderr $WORK/schema-default.txt
 ! exists $WORK/files
 
 # A package schema that declares global.imageRegistry is allowed: a
 # package legitimately gives a default to a key of global it uses.
-status 0 okdp-compile --repository $WORK/schema-global -o $WORK/files
+status 0 okdp-gitops-compile --repository $WORK/schema-global -o $WORK/files
 ! stdout .
 ! stderr .
 rm $WORK/files
 
 # An object of a deployer engine's kinds (Flux, Argo CD) lets a project
 # drive the engine: refused for a project that is not privileged.
-status 1 okdp-compile --repository $WORK/engine -o $WORK/files
+status 1 okdp-gitops-compile --repository $WORK/engine -o $WORK/files
 ! stdout .
 cmp stderr $WORK/engine-cr.txt
 ! exists $WORK/files
 
 # The same engine object in a privileged project: written as computed.
-status 0 okdp-compile --repository $WORK/engine-priv -o $WORK/files
+status 0 okdp-gitops-compile --repository $WORK/engine-priv -o $WORK/files
 ! stdout .
 ! stderr .
 grep 'kind: HelmRelease' $WORK/files/projects/infra/instances/infra-web/okdp-objects.values.yaml
@@ -61,7 +61,7 @@ rm $WORK/files
 # engines'), or the platform does (global.okdp.policy.reserved), even
 # one it lists as privileged: refused, nothing written. The project
 # default is not reserved.
-status 1 okdp-compile --repository $WORK/reserved -o $WORK/files --target flux
+status 1 okdp-gitops-compile --repository $WORK/reserved -o $WORK/files --target flux
 ! stdout .
 cmp stderr $WORK/reserved.txt
 ! exists $WORK/files
@@ -70,7 +70,7 @@ cmp stderr $WORK/reserved.txt
 # (global.okdp.policy.projectGlobals): every chart receives global, so
 # imageRegistry would reach them beside the upstream policy's registries.
 # storageClass and project are the default list's.
-status 1 okdp-compile --repository $WORK/project-global -o $WORK/files
+status 1 okdp-gitops-compile --repository $WORK/project-global -o $WORK/files
 ! stdout .
 cmpenv stderr $WORK/project-global.txt
 ! exists $WORK/files
@@ -78,7 +78,7 @@ cmpenv stderr $WORK/project-global.txt
 # Two objects of one kind, namespace and name in an instance: the second
 # would replace the first, as two claims' objects do whose names a provider
 # derived the same way (a-b.c and a.b-c both a-b-c).
-status 1 okdp-compile --repository $WORK/duplicate -o $WORK/files
+status 1 okdp-gitops-compile --repository $WORK/duplicate -o $WORK/files
 ! stdout .
 cmp stderr $WORK/duplicate.txt
 ! exists $WORK/files

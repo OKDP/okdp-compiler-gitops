@@ -224,7 +224,7 @@ func TestHelmSchema(t *testing.T) {
 				}
 				// Helm: "Error: <message>", "<chart>:", then the violations.
 				lines := strings.Split(helm, "\n")
-				got := chart.SchemaError("values", map[string]string{"schema": v})
+				got := chartcheck.SchemaError("values", map[string]string{"schema": v})
 				if got == nil {
 					t.Fatalf("%s: no violation, Helm reports:\n%s", name, helm)
 				}
