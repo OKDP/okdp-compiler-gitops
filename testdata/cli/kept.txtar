@@ -125,6 +125,7 @@ web:
 -- tree/projects/data/instances/pg/instance.yaml --
 service: pg
 version: 1.0.0
+claimers: [demo]
 -- tree/projects/data/instances/x/instance.yaml --
 service: web
 version: 1.0.0

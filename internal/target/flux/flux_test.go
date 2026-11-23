@@ -251,7 +251,7 @@ func TestFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := Target{PathPrefix: "deploy"}.Files(results, g)
+	files, err := Target{PathPrefix: "deploy"}.Files(results, g, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,12 +289,12 @@ func TestFiles(t *testing.T) {
 	if got := string(files["projects/kustomization.yaml"]); !strings.HasSuffix(got, "resources:\n  - data\n  - demo\n") {
 		t.Errorf("the root Kustomization:\n%s", got)
 	}
-	if none, err := (Target{}).Files(nil, nil); err != nil || len(none) != 1 || !strings.HasSuffix(string(none["projects/kustomization.yaml"]), "resources: []\n") {
+	if none, err := (Target{}).Files(nil, nil, nil); err != nil || len(none) != 1 || !strings.HasSuffix(string(none["projects/kustomization.yaml"]), "resources: []\n") {
 		t.Errorf("no results: %v %q", err, none)
 	}
 	// Projects kept as the output has them: listed by the root, once, no
 	// file of theirs written.
-	kept, err := Target{Keep: []string{"other", "demo"}}.Files(results, g)
+	kept, err := Target{Keep: []string{"other", "demo"}}.Files(results, g, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,10 +308,10 @@ func TestFiles(t *testing.T) {
 	}
 	// Two releases of one name in two namespaces.
 	twice := []*compiler.Result{{Namespace: "a", Release: "x"}, {Namespace: "b", Release: "x"}}
-	if _, err := (Target{}).Files(twice, g); err == nil || !strings.Contains(err.Error(), "the HelmReleases of okdp-releases need distinct names") {
+	if _, err := (Target{}).Files(twice, g, nil); err == nil || !strings.Contains(err.Error(), "the HelmReleases of okdp-releases need distinct names") {
 		t.Errorf("twice: %v", err)
 	}
-	if _, err := (Target{Source: "x"}).Files(results, g); err == nil {
+	if _, err := (Target{Source: "x"}).Files(results, g, nil); err == nil {
 		t.Error("a wrong option is refused first")
 	}
 }
@@ -325,7 +325,7 @@ func TestFilesValuesLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := (Target{}).Files(results, g); err == nil || !strings.Contains(err.Error(), "demo/demo-web: instance.values.yaml is") {
+	if _, err := (Target{}).Files(results, g, nil); err == nil || !strings.Contains(err.Error(), "demo/demo-web: instance.values.yaml is") {
 		t.Errorf("got %v, want the instance's values refused", err)
 	}
 }

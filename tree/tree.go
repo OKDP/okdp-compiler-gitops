@@ -29,13 +29,17 @@ type Tree struct {
 
 // Refused is a project of a Tree that does not load.
 type Refused struct {
-	Namespace string          // the project
-	Problems  []string        // why, each naming its repository and path
-	Errs      []error         // the error behind each problem, in the same order
-	Inputs    compiler.Inputs // the project's context (Namespace, Context, Contracts)
-	// Own reports whether Inputs holds the project's own layer. It is false
-	// when its project.yaml cannot be read: Inputs then holds the
-	// platform's layers alone.
+	Namespace string   // the project
+	Problems  []string // why, each naming its repository and path
+	Errs      []error  // the error behind each problem, in the same order
+	// Inputs are the project's (Namespace, Contracts, Values: the
+	// platform's layer and the project's, Settings: its groups,
+	// GroupsSettings).
+	Inputs compiler.Inputs
+	// Own reports whether Inputs holds the project's own layer and its
+	// groups. It is false when its project.yaml cannot be read or sets
+	// what its level may not: Inputs then holds the platform's layer
+	// alone, and no group.
 	Own bool
 }
 

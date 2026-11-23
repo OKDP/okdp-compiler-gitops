@@ -25,9 +25,28 @@ import (
 // Target: an output format: the files of compiled instances, path ->
 // content, every path under ProjectsDir, all a deployer reads of the
 // compiled tree. results are those of every instance of their namespaces,
-// g their graph (tree.NewGraph).
+// g their graph (tree.NewGraph), groups the roles of the groups of their
+// projects.
 type Target interface {
-	Files(results []*compiler.Result, g *tree.Graph) (map[string][]byte, error)
+	Files(results []*compiler.Result, g *tree.Graph, groups ProjectGroups) (map[string][]byte, error)
+}
+
+// ProjectGroups: the roles of the groups of each project, by namespace, then by
+// group: what the tree gives its instances (tree.Groups, the
+// access of its project.yaml), what a deployer target writes the
+// project's access from. A namespace without an entry has no group.
+type ProjectGroups map[string]map[string]compiler.AccessRole
+
+// GroupsOf: the ProjectGroups of instances, each project's those of its first
+// instance, which every instance of a project has alike.
+func GroupsOf(instances []compiler.Instance) ProjectGroups {
+	out := ProjectGroups{}
+	for _, inst := range instances {
+		if _, ok := out[inst.Inputs.Namespace]; !ok {
+			out[inst.Inputs.Namespace] = tree.Groups(inst.Inputs)
+		}
+	}
+	return out
 }
 
 // Keeper: a target that writes the platform's part of a project kept, one
@@ -108,15 +127,16 @@ func ProjectManifests(namespace string) string {
 // Projects: the projects of results, one per namespace that has a result,
 // in namespace order: privileged when any of its results is
 // (Result.Privileged), the first Result.SecretStore of the namespace that
-// is set, and the first result's Access, ControlPlane and Network, which
-// every result of a namespace has alike (its file's, the platform's), the
-// network's claimers those of every result of the namespace (AddClaimers).
-func Projects(results []*compiler.Result) []Project {
+// is set, the first result's ControlPlane and Network, which every result
+// of a namespace has alike (the platform's), the roles of its groups
+// those groups gives it, the network's claimers those of every result of
+// the namespace (AddClaimers).
+func Projects(results []*compiler.Result, groups ProjectGroups) []Project {
 	byNamespace := map[string]*Project{}
 	for _, res := range results {
 		p, ok := byNamespace[res.Namespace]
 		if !ok {
-			p = &Project{Namespace: res.Namespace, Access: ProjectAccess{Groups: res.Groups, GroupPrefix: groupPrefix(res.Settings)}, ControlPlane: controlPlaneOf(res.Settings), APIGroups: apiGroups(res.Settings)}
+			p = &Project{Namespace: res.Namespace, Access: ProjectAccess{Groups: groups[res.Namespace], GroupPrefix: groupPrefix(res.Settings)}, ControlPlane: controlPlaneOf(res.Settings), APIGroups: apiGroups(res.Settings)}
 			if n := networkOf(res.Settings); n != nil {
 				p.Network = &Network{Ingress: n.Ingress}
 			}

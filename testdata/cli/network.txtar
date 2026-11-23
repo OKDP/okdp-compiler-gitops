@@ -156,6 +156,7 @@ app:
 -- tree/projects/data/instances/pg/instance.yaml --
 service: pg
 version: 1.0.0
+claimers: [demo]
 -- tree/projects/demo/instances/app/instance.yaml --
 service: app
 version: 1.0.0

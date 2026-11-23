@@ -108,7 +108,7 @@ func (Target) CheckInstance(res *compiler.Result) error {
 // namespaces take a name a release cannot (a dot: okdp.projects), the
 // HelmReleases being named after the releases, their values ConfigMaps
 // values-<release>, the projects' ServiceAccounts project-<namespace>.
-func (t Target) Files(results []*compiler.Result, g *tree.Graph) (map[string][]byte, error) {
+func (t Target) Files(results []*compiler.Result, g *tree.Graph, groups target.ProjectGroups) (map[string][]byte, error) {
 	if err := t.check(); err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (t Target) Files(results []*compiler.Result, g *tree.Graph) (map[string][]b
 	if err := target.OwnNamespaces(results, map[string]string{ReleasesNamespace: ReleaseObjects + " and the identities of the projects", source: "the GitRepository of the tree (Flux.Source)"}); err != nil {
 		return nil, err
 	}
-	files, err := helm.Umbrella{Charts: t.Charts}.Files(results, g)
+	files, err := helm.Umbrella{Charts: t.Charts}.Files(results, g, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (t Target) Files(results []*compiler.Result, g *tree.Graph) (map[string][]b
 		instances[res.Namespace] = append(instances[res.Namespace], path.Join("instances", res.Release))
 	}
 	var namespaces []string
-	for _, p := range target.Projects(results) {
+	for _, p := range target.Projects(results, groups) {
 		manifests, err := t.ProjectManifests(p)
 		if err != nil {
 			return nil, err

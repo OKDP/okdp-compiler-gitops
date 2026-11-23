@@ -1,8 +1,8 @@
-# The platform values, the same for every instance: a context layer of
-# level 0, merged before the instance's layers.
+# The platform values, the same for every instance: the file of level 0,
+# merged before the instance's layers.
 #
 # global.okdp: the platform's settings, which an instance's layers cannot
-# change.
+# change (okdp-gitops refuses them).
 global:
   okdp:
     ingress:
@@ -34,7 +34,7 @@ global:
         classes:
           standard: {provider: demo/demo-db}
 
-# A context layer may set more than global. A connection given here is one
+# The platform's file may set more than global. A connection given here is one
 # every instance may reference by name. Here the instance's audit database
 connections:
   platform-db:

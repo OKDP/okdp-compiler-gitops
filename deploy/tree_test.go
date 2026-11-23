@@ -40,7 +40,7 @@ func TestTreeNames(t *testing.T) {
 		tree.PlatformFile: file("global: {okdp: {}}\n"),
 		path.Join(tree.ContractsDir, "http.schema.json"):         file(`{"properties": {"url": {"type": "string"}}}`),
 		path.Join(tree.CatalogDir, "web", "1.0.0", "Chart.yaml"): file("apiVersion: v2\nname: web\nversion: 1.0.0\n"),
-		path.Join(tree.ProjectsDir, "demo", tree.ProjectFile):     file("connections: {api: {contract: http, url: https://api.example.org}}\n"),
+		path.Join(tree.ProjectsDir, "demo", tree.ProjectFile):    file("connections: {api: {contract: http, url: https://api.example.org}}\n"),
 		path.Join(instance, tree.InstanceFile):                   file("service: web\nversion: 1.0.0\n"),
 		path.Join(instance, tree.ConnectionsFile):                file("connections: {own: {contract: http, url: https://own.example.org}}\n"),
 		path.Join(instance, tree.ConfigFile):                     file("{}\n"),
@@ -49,8 +49,8 @@ func TestTreeNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(instances) != 1 || len(instances[0].Inputs.Context) != 3 || len(instances[0].Inputs.Values) != 1 {
-		t.Fatalf("got %d instances, want one with its 3 context layers and its values", len(instances))
+	if len(instances) != 1 || len(instances[0].Inputs.Values) != 4 {
+		t.Fatalf("got %d instances, want one with its 4 values layers: the platform's, the project's, its connections and its values", len(instances))
 	}
 	in := instances[0].Inputs
 	if want := tree.ReleaseName("demo", "web"); in.Release != want || want != "demo-web" || in.Namespace != "demo" {
@@ -64,7 +64,7 @@ func TestTreeNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := deploy.Umbrella{}.Files([]*compiler.Result{res}, g)
+	files, err := deploy.Umbrella{}.Files([]*compiler.Result{res}, g, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestAccess(t *testing.T) {
 	project := "description: the demo\naccess:\n  okdp-project-demo: admin\n  analysts: viewer\n"
 	src := fstest.MapFS{
 		tree.PlatformFile: file(platform),
-		path.Join(tree.CatalogDir, "web", "1.0.0", "Chart.yaml"):                      file("apiVersion: v2\nname: web\nversion: 1.0.0\n"),
+		path.Join(tree.CatalogDir, "web", "1.0.0", "Chart.yaml"):                       file("apiVersion: v2\nname: web\nversion: 1.0.0\n"),
 		path.Join(tree.ProjectsDir, "demo", tree.ProjectFile):                          file(project),
 		path.Join(tree.ProjectsDir, "demo", tree.InstancesDir, "web", "instance.yaml"): file("service: web\nversion: 1.0.0\n"),
 		path.Join(tree.ProjectsDir, "ops", tree.InstancesDir, "web", "instance.yaml"):  file("service: web\nversion: 1.0.0\n"),
@@ -187,14 +187,13 @@ func TestAccess(t *testing.T) {
 	if want := map[string]compiler.AccessRole{"okdp-project-demo": compiler.AccessAdmin, "analysts": compiler.AccessViewer}; err != nil || !maps.Equal(got, want) {
 		t.Errorf("ProjectAccess: %v, %v", got, err)
 	}
-	values, err := compiler.ParseValues([]byte(platform))
-	if err != nil {
-		t.Fatal(err)
+	if got, err := deploy.ProjectAccess(nil, []byte("description: no access\n"), "ops"); err != nil || !maps.Equal(got, map[string]compiler.AccessRole{"okdp-project-ops": compiler.AccessEditor}) {
+		t.Errorf("ProjectAccess, the default: %v, %v", got, err)
 	}
-	if admins, err := compiler.PlatformAdmins(context.Background(), rules.Standard(), values); err != nil || !slices.Equal(admins, []string{"platform_admin"}) {
-		t.Errorf("PlatformAdmins: %v, %v", admins, err)
+	if _, err := deploy.ProjectAccess(nil, []byte("access: {a/b: viewer}\n"), "demo"); err == nil || !strings.Contains(err.Error(), "access.a/b: a group name") {
+		t.Errorf("ProjectAccess, a refused group: %v", err)
 	}
-	if compiler.DefaultProjectGroup("demo") != "okdp-project-demo" || !compiler.IsGroupName("platform_admin") || compiler.IsGroupName("/platform_admin") {
+	if tree.DefaultProjectGroup("demo") != "okdp-project-demo" || !compiler.IsGroupName("platform_admin") || compiler.IsGroupName("/platform_admin") {
 		t.Error("DefaultProjectGroup, IsGroupName")
 	}
 }
@@ -207,7 +206,7 @@ func TestAccess(t *testing.T) {
 func TestPartialRederives(t *testing.T) {
 	file := func(s string) *fstest.MapFile { return &fstest.MapFile{Data: []byte(s)} }
 	src := fstest.MapFS{
-		tree.PlatformFile:                         file("global: {okdp: {policy: {privileged: [ops]}}}\n"),
+		tree.PlatformFile:                        file("global: {okdp: {policy: {privileged: [ops]}}}\n"),
 		"catalog/admin/1.0.0/Chart.yaml":         file("apiVersion: v2\nname: admin\nversion: 1.0.0\ndependencies:\n  - {name: hello, alias: app, repository: https://charts.example.org, version: 1.0.0}\n"),
 		"catalog/admin/1.0.0/okdp.yaml":          file("objects:\n  - {apiVersion: rbac.authorization.k8s.io/v1, kind: ClusterRoleBinding, metadata: {name: ops-admin}, roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: cluster-admin}, subjects: [{kind: ServiceAccount, name: default, namespace: ops}]}\n"),
 		"catalog/admin/1.0.0/config.schema.json": file(`{"type": "object", "properties": {"n": {"type": "integer"}}}`),

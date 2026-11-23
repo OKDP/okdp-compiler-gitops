@@ -186,7 +186,7 @@ func TestFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := Target{RepoURL: "https://x/tree.git", PathPrefix: "deploy"}.Files(results, g)
+	files, err := Target{RepoURL: "https://x/tree.git", PathPrefix: "deploy"}.Files(results, g, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,10 +212,10 @@ func TestFiles(t *testing.T) {
 		t.Error("a secret store without a provider")
 	}
 	twice := []*compiler.Result{{Namespace: "a", Release: "x"}, {Namespace: "b", Release: "x"}}
-	if _, err := (Target{RepoURL: "https://x"}).Files(twice, g); err == nil || !strings.Contains(err.Error(), "the Applications of argocd need distinct names") {
+	if _, err := (Target{RepoURL: "https://x"}).Files(twice, g, nil); err == nil || !strings.Contains(err.Error(), "the Applications of argocd need distinct names") {
 		t.Errorf("twice: %v", err)
 	}
-	if _, err := (Target{}).Files(results, g); err == nil {
+	if _, err := (Target{}).Files(results, g, nil); err == nil {
 		t.Error("a wrong option is refused first")
 	}
 }

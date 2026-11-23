@@ -545,7 +545,7 @@ func newTarget(o options) (deploy.Target, error) {
 			return nil, fmt.Errorf("%s is read by --target %s only", f[0], f[2])
 		}
 	}
-	if _, err := tg.Files(nil, nil); err != nil {
+	if _, err := tg.Files(nil, nil, nil); err != nil {
 		return nil, err
 	}
 	return tg, nil

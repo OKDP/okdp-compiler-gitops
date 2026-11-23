@@ -1,7 +1,7 @@
 # The platform values: the classes of database-server connections, standard
 # the default and large, their provider data/postgresql, which serves the
-# claims of every project through them; the secret store the credentials
-# of a claim cross namespaces through.
+# claims of every project through them (its claimers); the secret store
+# the credentials of a claim cross namespaces through.
 global:
   okdp:
     provisioning:

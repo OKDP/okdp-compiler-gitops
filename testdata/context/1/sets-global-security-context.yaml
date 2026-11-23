@@ -1,4 +1,4 @@
-# error: context layer 2 (level 1): global.securityContext: a key of global the platform does not let a project set
+# error: db/projects/demo/project.yaml: global.securityContext: a key of global the platform does not let a project set: global.okdp.policy.projectGlobals of db/platform.yaml lists project, storageClass
 # A project's file (project.yaml) setting a pod's security context through
 # global, past deniedKeys.
 global:

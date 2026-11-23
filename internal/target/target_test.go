@@ -61,9 +61,13 @@ var platform = map[string]any{"global": map[string]any{"okdp": map[string]any{
 	"secrets":      map[string]any{"store": "platform", "provider": map[string]any{"vault": map[string]any{"server": "https://vault.example.org", "path": "okdp", "auth": map[string]any{"kubernetes": map[string]any{"mountPath": "kubernetes", "role": "okdp", "serviceAccountRef": map[string]any{"name": "okdp-secrets"}}}}}},
 }}}
 
-// demoProject: the file of the project demo: the roles of its groups, its
-// default group an editor among them; data's gives none, the default.
-var demoProject = map[string]any{"access": map[string]any{"okdp-project-demo": "editor", "demo-leads": "admin", "auditors": "viewer", "analysts": "viewer"}}
+// groups: the roles of the groups of each project, as the tree reads
+// them from its file: demo's, its default group an editor among them;
+// data's file gives none, the default.
+var groups = target.ProjectGroups{
+	"demo": {"okdp-project-demo": compiler.AccessEditor, "demo-leads": compiler.AccessAdmin, "auditors": compiler.AccessViewer, "analysts": compiler.AccessViewer},
+	"data": {tree.DefaultProjectGroup("data"): compiler.AccessEditor},
+}
 
 // compiled: three instances, compiled with platform, and their graph:
 // demo-web, which waits for demo-db, in namespace demo; data-db alone in
@@ -75,11 +79,7 @@ func compiled(t *testing.T) ([]*compiler.Result, *tree.Graph) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		layers := []compiler.ContextLayer{{Values: platform}}
-		if namespace == "demo" {
-			layers = append(layers, compiler.ContextLayer{Level: 1, Values: demoProject})
-		}
-		return compiler.Instance{Definition: def, Inputs: compiler.Inputs{Rules: rules.Standard(), Finalize: helmvalues.New(nil), Contracts: contracts, Context: layers, Values: []map[string]any{values}, Release: release, Namespace: namespace}}
+		return compiler.Instance{Definition: def, Inputs: compiler.Inputs{Rules: rules.Standard(), Finalize: helmvalues.New(nil), Contracts: contracts, Values: []map[string]any{platform, values}, Release: release, Namespace: namespace, Settings: tree.GroupsSettings(groups[namespace])}}
 	}
 	var results []*compiler.Result
 	for _, o := range compiler.CompileAll(context.Background(), []compiler.Instance{
@@ -109,7 +109,7 @@ func TestTargets(t *testing.T) {
 		"argocd": argocd.Target{RepoURL: "https://git.example.org/okdp/deployments.git", Revision: "main"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			files, err := tg.Files(results, g)
+			files, err := tg.Files(results, g, groups)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -170,7 +170,7 @@ func TestOptions(t *testing.T) {
 		"argocd releases": {argocd.Target{RepoURL: "https://x"}, twice, `release "demo-db" is in namespaces "data" and "demo": the Applications of argocd need distinct names`},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := tc.target.Files(tc.results, g); err == nil || err.Error() != tc.want {
+			if _, err := tc.target.Files(tc.results, g, nil); err == nil || err.Error() != tc.want {
 				t.Errorf("got %v\nwant %s", err, tc.want)
 			}
 		})
@@ -179,19 +179,21 @@ func TestOptions(t *testing.T) {
 
 // TestProjects: a project per namespace of the results, in namespace
 // order, privileged when any of its results is, its secret store the
-// first set.
+// first set, the roles of its groups those given for its namespace, none
+// without.
 func TestProjects(t *testing.T) {
 	store := &compiler.SecretStore{Name: "platform", ServiceAccount: "okdp-secrets", Provider: map[string]any{"fake": map[string]any{}}}
+	demo := map[string]compiler.AccessRole{"devs": compiler.AccessEditor}
 	got := target.Projects([]*compiler.Result{
 		{Namespace: "demo", Release: "demo-web"},
 		{Namespace: "data", Release: "data-db", Privileged: true, SecretStore: store},
 		{Namespace: "demo", Release: "demo-db", Privileged: true, SecretStore: store},
-	})
-	want := []target.Project{{Namespace: "data", Privileged: true, SecretStore: store}, {Namespace: "demo", Privileged: true, SecretStore: store}}
+	}, target.ProjectGroups{"demo": demo, "other": {"ops": compiler.AccessAdmin}})
+	want := []target.Project{{Namespace: "data", Privileged: true, SecretStore: store}, {Namespace: "demo", Privileged: true, SecretStore: store, Access: target.ProjectAccess{Groups: demo}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
-	if got := target.Projects(nil); got != nil {
+	if got := target.Projects(nil, nil); got != nil {
 		t.Errorf("no result: %v", got)
 	}
 }
@@ -238,11 +240,11 @@ metadata:
 // of its own beside them.
 func TestOneTree(t *testing.T) {
 	results, g := compiled(t)
-	fluxFiles, err := flux.Target{}.Files(results, g)
+	fluxFiles, err := flux.Target{}.Files(results, g, groups)
 	if err != nil {
 		t.Fatal(err)
 	}
-	argoFiles, err := argocd.Target{RepoURL: "https://git.example.org/okdp/deployments.git"}.Files(results, g)
+	argoFiles, err := argocd.Target{RepoURL: "https://git.example.org/okdp/deployments.git"}.Files(results, g, groups)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +328,7 @@ func TestReleases(t *testing.T) {
 	if err := target.Releases(results[2:3]); err != nil {
 		t.Errorf("one release: %v", err)
 	}
-	_, err = (flux.Target{}).Files(results[:2], nil)
+	_, err = (flux.Target{}).Files(results[:2], nil, groups)
 	if re := (*target.ReleaseError)(nil); !errors.As(err, &re) || re.Release != "demo-db" {
 		t.Errorf("flux: got %v, want a *ReleaseError", err)
 	}
@@ -345,7 +347,7 @@ func TestOwnNamespaces(t *testing.T) {
 	}
 	for name, tc := range map[string]struct {
 		target interface {
-			Files([]*compiler.Result, *tree.Graph) (map[string][]byte, error)
+			Files([]*compiler.Result, *tree.Graph, target.ProjectGroups) (map[string][]byte, error)
 		}
 		results []*compiler.Result
 		want    string
@@ -354,7 +356,7 @@ func TestOwnNamespaces(t *testing.T) {
 		"flux source":   {flux.Target{Source: "gitops/tree"}, []*compiler.Result{{Namespace: "gitops", Release: "gitops-x"}, {Namespace: "demo", Release: "demo-x"}}, `project "gitops": the namespace is reserved: it holds the GitRepository of the tree (Flux.Source), no project's`},
 		"argocd":        {argocd.Target{RepoURL: "https://x"}, []*compiler.Result{{Namespace: argocd.Namespace, Release: "argocd-x"}}, `project "argocd": the namespace is reserved: it holds the Applications of argocd and the AppProjects, no project's`},
 	} {
-		if _, err := tc.target.Files(tc.results, g); err == nil || err.Error() != tc.want {
+		if _, err := tc.target.Files(tc.results, g, nil); err == nil || err.Error() != tc.want {
 			t.Errorf("%s: got %v\nwant %s", name, err, tc.want)
 		}
 	}
@@ -485,7 +487,7 @@ func TestNetworkPolicy(t *testing.T) {
 		{Namespace: "data", Release: "data-b", Settings: net, Claims: of("demo", "data", "monitoring")},
 		{Namespace: "ops", Release: "ops-x", Privileged: true, Settings: net, Claims: of("demo")},
 		{Namespace: "web", Release: "web-x"},
-	})
+	}, nil)
 	if got := ps[0].Network.Claimers; !slices.Equal(got, []string{"demo", "monitoring", "web"}) {
 		t.Errorf("claimers: %v", got)
 	}

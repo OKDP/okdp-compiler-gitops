@@ -6,12 +6,16 @@ function and document is in their references, [the mandatory
 set](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/05_rules.md)
 and [the security
 set](https://github.com/OKDP/okdp-compiler-security/blob/main/docs/specs/04_rules.md).
-okdp-gitops holds no rule. It wires what runs in its own Helm merge, the
-security set's [upstream
+okdp-gitops holds no rule of the rule sets. It holds those of the
+origins of the values, which the compiler, given flat values layers,
+does not know: what each file of the tree may set ([the
+levels](01_layout.md#the-levels)), enforced as the tree loads. It wires
+what runs in its own Helm merge, the security set's [upstream
 policy](https://github.com/OKDP/okdp-compiler-security/blob/main/docs/specs/05_upstream_policy.md)
-(its package `policy`), and the render of the upstream charts, both
-through `Inputs.Finalize` and `Inputs.CheckGlobals`, which
-`deploy.Build` sets.
+(its package `policy`), and the render of the upstream charts, through
+`Inputs.Finalize`, and the upstream policy on the globals of the files
+it does not review, a project's and an instance's, through
+`tree.BuildOptions.CheckGlobals`, which `deploy.Build` sets.
 
 - [Who applies it](#who-applies-it)
 - [The render](#the-render)
@@ -22,9 +26,11 @@ through `Inputs.Finalize` and `Inputs.CheckGlobals`, which
 with the security set added (`security.Rules()`), to every compile
 unless the caller sets `BuildOptions.Rules`, and wires the upstream
 policy (`policy.UpstreamCheck` in its `Inputs.Finalize`,
-`policy.CheckGlobals` as its `Inputs.CheckGlobals`, `policy.PlainUpstream`
-for the warnings) and the render. `okdp-compile`, `okdp-gitops compile`
-and the control plane all go through it.
+`policy.CheckGlobals` as its `BuildOptions.CheckGlobals`, called on the
+`global` of each `project.yaml` and `config.yaml` as the tree loads,
+`policy.PlainUpstream` for the warnings) and the render.
+`okdp-compile`, `okdp-gitops compile` and the control plane all go
+through it.
 
 The compiler runs the hooks of the security set itself: the hosts of an
 instance's objects, and those of the final values, which the compile
@@ -33,7 +39,8 @@ the checks against the charts and the render.
 
 A program that calls `tree.Build` or `compiler.Compile` itself
 applies the rule sets it gives, their checks and hooks among them, but
-neither the upstream policy nor the render below.
+neither the upstream policy nor the render below; `tree.Build` and
+`tree.Load` apply the levels, `compiler.Compile` none.
 
 A caller's rule set is honoured everywhere the tree is read, not only in
 the compile:
@@ -43,11 +50,11 @@ the compile:
 | `deploy.Build` | `BuildOptions.Rules` (`deploy.BuildOptions` embeds `tree.BuildOptions`); nil, `rules.Standard()` |
 | `gitops.Compiler` | its `Rules` field, for its compiles and for `Deployments.CheckProjectName`; nil, `rules.Standard()` |
 | `deploy.ProjectAccess`, `treeedit.CheckProjectName` | their first argument; nil, `rules.Standard()` |
-| `internal/target`, `internal/target/argocd` | they write the groups `ProjectOf` read with the compile's `Inputs.Rules`, and read no rule set themselves |
+| `internal/target`, `internal/target/argocd` | they write the groups the tree gives (`tree.Groups` of `Inputs.Settings`, `target.ProjectGroups`), and read no rule set themselves |
 
 The control plane offers no choice of rule set. It compiles with
-`rules.Standard()` and gives that same set to `PlatformAdmins`,
-`CheckConnection` and `deploy.ProjectAccess`.
+`rules.Standard()` and gives that same set to `CheckConnection` and
+`deploy.ProjectAccess`.
 
 ## The render
 

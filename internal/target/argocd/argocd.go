@@ -69,7 +69,7 @@ type Target struct {
 // being named after the releases, <project>-<instance>, the AppProjects
 // project-<namespace>: an Application okdp-instances would be the
 // release of the instance instances of a project okdp.
-func (t Target) Files(results []*compiler.Result, g *tree.Graph) (map[string][]byte, error) {
+func (t Target) Files(results []*compiler.Result, g *tree.Graph, groups target.ProjectGroups) (map[string][]byte, error) {
 	if err := t.check(); err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (t Target) Files(results []*compiler.Result, g *tree.Graph) (map[string][]b
 	if err := target.OwnNamespaces(results, map[string]string{Namespace: ReleaseObjects + " and the AppProjects"}); err != nil {
 		return nil, err
 	}
-	files, err := helm.Umbrella{Charts: t.Charts}.Files(results, g)
+	files, err := helm.Umbrella{Charts: t.Charts}.Files(results, g, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func (t Target) Files(results []*compiler.Result, g *tree.Graph) (map[string][]b
 		wave := g.Wave(tree.GraphNode{Namespace: res.Namespace, Release: res.Release})
 		files[path.Join(dir, ApplicationFile)] = append([]byte(target.Generated), t.Application(res.Namespace, res.Release, path.Join(t.PathPrefix, dir), wave)...)
 	}
-	for _, p := range target.Projects(results) {
+	for _, p := range target.Projects(results, groups) {
 		manifests, err := t.ProjectManifests(p)
 		if err != nil {
 			return nil, err

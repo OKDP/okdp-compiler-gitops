@@ -22,7 +22,8 @@ cmp stderr $WORK/other-namespace.txt
 ! exists $WORK/files
 
 # A package schema that declares global.okdp is refused: its defaults
-# would bypass the context layer guards and set the platform's settings.
+# would bypass what each file of the tree may set and set the platform's
+# settings.
 status 1 okdp-compile --repository $WORK/schema-okdp -o $WORK/files
 ! stdout .
 cmp stderr $WORK/schema-okdp.txt
@@ -71,7 +72,7 @@ cmp stderr $WORK/reserved.txt
 # storageClass and project are the default list's.
 status 1 okdp-compile --repository $WORK/project-global -o $WORK/files
 ! stdout .
-cmp stderr $WORK/project-global.txt
+cmpenv stderr $WORK/project-global.txt
 ! exists $WORK/files
 
 # Two objects of one kind, namespace and name in an instance: the second
@@ -298,7 +299,7 @@ objects:
 service: web
 version: 1.0.0
 -- project-global.txt --
-error: demo/demo-web: context layer 1 (level 1): global.imageRegistry: a key of global the platform does not let a project set (Inputs.Context): global.okdp.policy.projectGlobals lists project, storageClass; every chart of the instances receives global, past their package's protect and the upstream policy
+error: $WORK/project-global/projects/demo/project.yaml: global.imageRegistry: a key of global the platform does not let a project set: global.okdp.policy.projectGlobals of platform.yaml lists project, storageClass; every chart of the instances receives global, past their package's protect and the upstream policy
 -- project-global/catalog/web/1.0.0/Chart.yaml --
 apiVersion: v2
 name: web

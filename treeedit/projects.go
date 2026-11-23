@@ -75,7 +75,7 @@ func ListProjects(r Reader, split bool) ([]Project, error) {
 }
 
 // CheckProjectName refuses a project name the compile refuses, every
-// instance of the project with it (compiler.CheckProjectName): not a
+// instance of the project with it (compiler.CheckNamespace): not a
 // name, one okdp-compiler reserves (platform, kube-*, the deployer
 // engines' and the targets' namespaces) or one of the platform's,
 // global.okdp.policy.reserved of platform.yaml as r holds it. The
@@ -88,7 +88,7 @@ func CheckProjectName(set *compiler.RuleSet, r Reader, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := compiler.CheckProjectName(context.Background(), rules.Or(set), name, platform); err != nil {
+	if err := compiler.CheckNamespace(context.Background(), rules.Or(set), name, platform); err != nil {
 		return &CompileError{Project: name, Err: err}
 	}
 	return nil

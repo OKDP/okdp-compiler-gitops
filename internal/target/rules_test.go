@@ -1,7 +1,6 @@
 package target_test
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -9,25 +8,20 @@ import (
 	"github.com/okdp/okdp-gitops/internal/rulestest"
 	"github.com/okdp/okdp-gitops/internal/target"
 	"github.com/okdp/okdp-gitops/internal/target/argocd"
+	"github.com/okdp/okdp-gitops/tree"
 )
 
-// TestProjectRoles: the manifests of a project hold the roles its rule set
-// accepts, those of the compiler's mandatory set.
+// TestProjectRoles: the manifests of a project hold the roles of its
+// groups (tree.Groups, Inputs.Settings), whatever rule set it compiles
+// with.
 func TestProjectRoles(t *testing.T) {
-	set := rulestest.Added(t)
-	in := func(role string) compiler.Inputs {
-		return compiler.Inputs{Rules: set, Namespace: "demo", Context: []compiler.ContextLayer{{Level: 1, Values: map[string]any{"access": map[string]any{"ops": role}}}}}
-	}
-	p, err := target.ProjectOf(in("viewer"))
+	in := compiler.Inputs{Rules: rulestest.Added(t), Namespace: "demo", Settings: tree.GroupsSettings(map[string]compiler.AccessRole{"ops": compiler.AccessViewer})}
+	p, err := target.ProjectOf(in)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := string(target.Access(p)); !strings.Contains(got, "name: okdp-access-viewer\n") {
 		t.Errorf("Access:\n%s", got)
-	}
-	_, err = target.ProjectOf(in("owner"))
-	if accessErr := new(target.AccessError); !errors.As(err, &accessErr) {
-		t.Errorf("a role the set does not hold: %v", err)
 	}
 }
 

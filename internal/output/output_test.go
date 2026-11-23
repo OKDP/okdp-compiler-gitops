@@ -19,12 +19,14 @@ import (
 )
 
 // compiled: a tree of instances, each <namespace>/<name>, its release
-// <namespace>-<name>, compiled but those of refused.
+// <namespace>-<name>, its project's default group an editor, compiled
+// but those of refused.
 func compiled(names []string, refused ...string) *tree.Tree {
 	t := &tree.Tree{}
 	for _, n := range names {
 		ns, name, _ := strings.Cut(n, "/")
-		ti := &tree.Instance{Name: name, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: ns, Release: ns + "-" + name}}
+		groups := map[string]compiler.AccessRole{tree.DefaultProjectGroup(ns): compiler.AccessEditor} // as the tree gives a project without access
+		ti := &tree.Instance{Name: name, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: ns, Release: ns + "-" + name, Settings: tree.GroupsSettings(groups)}}
 		if slices.Contains(refused, n) {
 			ti.Outcome.Err = errors.New("refused")
 		} else {
@@ -233,7 +235,7 @@ func TestAReleaseCollisionKeepsItsProjects(t *testing.T) {
 // differs: a target that writes one file, of its content.
 type differs string
 
-func (d differs) Files([]*compiler.Result, *tree.Graph) (map[string][]byte, error) {
+func (d differs) Files([]*compiler.Result, *tree.Graph, target.ProjectGroups) (map[string][]byte, error) {
 	return map[string][]byte{"projects/x": []byte(d)}, nil
 }
 
@@ -268,9 +270,10 @@ func TestReleaseTaken(t *testing.T) {
 }
 
 // TestFilesRederive: a project kept is written of today's settings: the
-// files re-derived listed (Kept.Rederived); an access refused gives no
-// group a role, the platform's settings refused fail it; with no target
-// that rewrites it (the helm target), its output as it is.
+// files re-derived listed (Kept.Rederived), the RoleBindings of its
+// groups (tree.Groups) among them, none without a group; the
+// platform's settings refused fail it; with no target that rewrites it
+// (the helm target), its output as it is.
 func TestFilesRederive(t *testing.T) {
 	tr := compiled([]string{"demo/web"}, "demo/web")
 	previous := fstest.MapFS{
@@ -278,23 +281,28 @@ func TestFilesRederive(t *testing.T) {
 		"projects/demo/project/access.yaml":           file("old access\n"),
 		"projects/demo/instances/demo-web/Chart.yaml": file("old web\n"),
 	}
-	tr.Instances[0].Inputs.Context = []compiler.ContextLayer{{Level: 1, Values: map[string]any{"access": map[string]any{"a b": "viewer"}}}}
+	tr.Instances[0].Inputs.Settings = tree.GroupsSettings(map[string]compiler.AccessRole{"devs": compiler.AccessEditor})
 	files, kept, err := Files(tr, []target.Target{flux.Target{}}, previous, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := files["projects/demo/project/access.yaml"]; ok {
-		t.Error("an access refused: a group has a role")
+	if got := string(files["projects/demo/project/access.yaml"]); !strings.Contains(got, "name: \"devs\"") {
+		t.Errorf("the groups' roles: %s", got)
 	}
-	want := []string{"projects/demo/project/kustomization.yaml", "projects/demo/project/namespace.yaml", "projects/demo/project/service-account.yaml"}
+	want := []string{"projects/demo/project/access.yaml", "projects/demo/project/kustomization.yaml", "projects/demo/project/namespace.yaml", "projects/demo/project/service-account.yaml"}
 	if len(kept) != 1 || !slices.Equal(kept[0].Rederived, want) {
 		t.Errorf("Rederived: %+v", kept)
+	}
+	tr.Instances[0].Inputs.Settings = nil
+	files, kept, err = Files(tr, []target.Target{flux.Target{}}, previous, nil)
+	if _, ok := files["projects/demo/project/access.yaml"]; err != nil || ok || slices.Contains(kept[0].Rederived, "projects/demo/project/access.yaml") {
+		t.Errorf("no group: a group has a role: %v %+v", err, kept)
 	}
 	files, kept, err = Files(tr, []target.Target{helm.Target{}}, previous, nil)
 	if err != nil || string(files["projects/demo/project/access.yaml"]) != "old access\n" || kept[0].Rederived != nil {
 		t.Errorf("helm: %v %+v", err, kept)
 	}
-	tr.Instances[0].Inputs.Context = []compiler.ContextLayer{{Values: map[string]any{"global": map[string]any{"okdp": map[string]any{"policy": "x"}}}}}
+	tr.Instances[0].Inputs.Values = []map[string]any{{"global": map[string]any{"okdp": map[string]any{"policy": "x"}}}}
 	if _, _, err := Files(tr, []target.Target{flux.Target{}}, previous, nil); err == nil || !strings.Contains(err.Error(), "the project kept demo: its manifests of today's settings") {
 		t.Errorf("the platform's settings refused: %v", err)
 	}
@@ -335,7 +343,7 @@ func TestFilesUnloaded(t *testing.T) {
 		t.Error("a project the output does not hold is written")
 	}
 	// A context the platform's settings refuse: its output kept as it was.
-	tr.Refused[0].Inputs.Context = []compiler.ContextLayer{{Values: map[string]any{"global": map[string]any{"okdp": map[string]any{"policy": "x"}}}}}
+	tr.Refused[0].Inputs.Values = []map[string]any{{"global": map[string]any{"okdp": map[string]any{"policy": "x"}}}}
 	files, _, err = Files(tr, []target.Target{flux.Target{}}, previous, nil)
 	if err != nil || string(files["projects/demo/project/access.yaml"]) != "old access\n" {
 		t.Errorf("settings refused: %v", err)
@@ -348,12 +356,12 @@ func TestFilesUnloaded(t *testing.T) {
 // Kustomization or among the releases, Kept.Dropped says why, the others
 // kept as ever; one the output does not hold is not dropped.
 func TestFilesDropped(t *testing.T) {
-	reserved := []compiler.ContextLayer{{Values: map[string]any{"global": map[string]any{"okdp": map[string]any{"policy": map[string]any{"reserved": []any{"openbao"}}}}}}}
+	reserved := []map[string]any{{"global": map[string]any{"okdp": map[string]any{"policy": map[string]any{"reserved": []any{"openbao"}}}}}}
 	tr := compiled([]string{"openbao/web", "kube-system/web", "demo/web", "fresh/web"}, "openbao/web", "kube-system/web", "demo/web", "fresh/web")
 	for _, ti := range tr.Instances {
-		ti.Inputs.Context = reserved
+		ti.Inputs.Values = reserved
 	}
-	tr.Refused = []tree.Refused{{Namespace: "loose", Problems: []string{"x"}, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "loose", Context: reserved}, Own: true}}
+	tr.Refused = []tree.Refused{{Namespace: "loose", Problems: []string{"x"}, Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "loose", Values: reserved}, Own: true}}
 	previous := fstest.MapFS{}
 	for _, ns := range []string{"openbao", "kube-system", "demo"} {
 		previous["projects/"+ns+"/kustomization.yaml"] = file("old " + ns + "\n")
@@ -388,7 +396,7 @@ func TestFilesDropped(t *testing.T) {
 	// A dropped project's release no longer counts: another namespace may
 	// have it.
 	other := compiled([]string{"openbao/web", "a/b-web"}, "openbao/web")
-	other.Instances[0].Inputs.Context = reserved
+	other.Instances[0].Inputs.Values = reserved
 	other.Instances[1].Inputs.Namespace, other.Instances[1].Inputs.Release, other.Instances[1].Name = "a", "a-b-web", "b-web"
 	if _, kept, err := Files(other, []target.Target{flux.Target{}}, fstest.MapFS{"projects/openbao/instances/a-b-web/Chart.yaml": file("old\n")}, nil); err != nil || kept[0].Dropped == "" {
 		t.Errorf("a release of a project dropped: %v %+v", err, kept)
@@ -407,9 +415,9 @@ func TestPlatformObjectNames(t *testing.T) {
 	}
 }
 
-// settingsLayer: a context layer of the platform, level 0, policy given.
-func settingsLayer(policy map[string]any) compiler.ContextLayer {
-	return compiler.ContextLayer{Level: 0, Values: map[string]any{"global": map[string]any{"okdp": map[string]any{"policy": policy}}}}
+// settingsLayer: a values layer of the platform's, policy given.
+func settingsLayer(policy map[string]any) map[string]any {
+	return map[string]any{"global": map[string]any{"okdp": map[string]any{"policy": policy}}}
 }
 
 // TestFilesOversizedInstanceKeepsItsProject: an instance whose values are
@@ -454,8 +462,7 @@ func keptFiles() fstest.MapFS {
 func TestWithdrawTightenedPolicy(t *testing.T) {
 	tr := compiled([]string{"demo/bad", "demo/ok"}, "demo/bad")
 	bad := tr.Instances[0]
-	bad.Inputs.Context = []compiler.ContextLayer{settingsLayer(map[string]any{"upstream": map[string]any{"deny": []any{"extraThing"}}})}
-	bad.Inputs.Values = []map[string]any{{"upstream": map[string]any{"app": map[string]any{"extraThing": map[string]any{"x": 1}}}}}
+	bad.Inputs.Values = []map[string]any{settingsLayer(map[string]any{"upstream": map[string]any{"deny": []any{"extraThing"}}}), {"upstream": map[string]any{"app": map[string]any{"extraThing": map[string]any{"x": 1}}}}}
 	bad.Outcome.Err = errors.New("upstream.app.extraThing: denied")
 	files, kept, err := Files(tr, []target.Target{flux.Target{}}, keptFiles(), nil)
 	if err != nil {
@@ -480,8 +487,7 @@ func TestWithdrawTightenedPolicy(t *testing.T) {
 func TestWithdrawKeepsATenantEdit(t *testing.T) {
 	tr := compiled([]string{"demo/bad", "demo/ok"}, "demo/bad")
 	bad := tr.Instances[0]
-	bad.Inputs.Context = []compiler.ContextLayer{settingsLayer(map[string]any{"upstream": map[string]any{"deny": []any{"extraThing"}}})}
-	bad.Inputs.Values = []map[string]any{{"upstream": map[string]any{"app": map[string]any{"extraThing": map[string]any{"x": 1}}}}}
+	bad.Inputs.Values = []map[string]any{settingsLayer(map[string]any{"upstream": map[string]any{"deny": []any{"extraThing"}}}), {"upstream": map[string]any{"app": map[string]any{"extraThing": map[string]any{"x": 1}}}}}
 	bad.Outcome.Err = errors.New("upstream.app.extraThing: denied")
 	previous := keptFiles()
 	previous["projects/demo/instances/demo-bad/instance.values.yaml"] = file("app:\n  y: 1\n")

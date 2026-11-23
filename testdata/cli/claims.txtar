@@ -1,7 +1,8 @@
 # Claims: demo-app claims a server connection of its own, demo-b and
 # demo-c reference the named claim of their project, reports; data/data-pg,
 # the provider of the platform's default class of server connections,
-# standard, provisions them, compiled first. Each binding on stderr, then,
+# standard, which every namespace may claim of (its claimers), provisions
+# them, compiled first. Each binding on stderr, then,
 # the files written, the dependencies, across namespaces.
 status 0 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree -o $WORK/out
 ! stdout .
@@ -20,8 +21,8 @@ cmp stderr $WORK/stderr.txt
 # No default class: a claim that names neither a class nor a provider is
 # refused, the classes said; nothing written.
 status 1 okdp-compile --repository $WORK/lib --repository $WORK/tree --repository $WORK/second -o $WORK/none
-stderr '^error: demo/demo-app: claims.reports: claim \(server\): it names no class, and the context sets no default one, global.okdp.provisioning.server.default \(Inputs.Context\): no class of server connections is defined \(global.okdp.provisioning.server.classes\)$'
-stderr '^db: claim \(server\): it names no class, and the context sets no default one, global.okdp.provisioning.server.default \(Inputs.Context\): no class of server connections is defined \(global.okdp.provisioning.server.classes\)$'
+stderr '^error: demo/demo-app: claims.reports: claim \(server\): it names no class, and the settings set no default one, global.okdp.provisioning.server.default: no class of server connections is defined \(global.okdp.provisioning.server.classes\)$'
+stderr '^db: claim \(server\): it names no class, and the settings set no default one, global.okdp.provisioning.server.default: no class of server connections is defined \(global.okdp.provisioning.server.classes\)$'
 ! exists $WORK/none
 
 # A requirement the default class's provider does not meet: the claimer
@@ -39,13 +40,13 @@ status 0 okdp-compile --repository $WORK/lib --repository $WORK/platform --repos
 stderr '^reports/reports-strict: db: claim reports.strict.db \(server\) bound to data2/data2-pg2, class second$'
 
 # Without its consent, a provider of another namespace serves no claim
-# that names it, nor one of a class of the claimer's project: the claim is
-# refused, the provider's claimers said, its instance.yaml's, else its
-# package's provisions'; nothing written. The platform's classes need
-# none (data/data-pg, above). A package's claimers bind the namespaces
-# they list, unless its instance lists its own.
+# that names it, nor one of a class, the claimer's project's or the
+# platform's: the claim is refused, the provider's claimers said, its
+# instance.yaml's, else its package's provisions'; nothing written.
+# data/data-pg, above, lists every namespace. A package's claimers bind
+# the namespaces they list, unless its instance lists its own.
 status 1 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/closed --repository $WORK/named -o $WORK/closed-out
-stderr '^error: reports/reports-strict: db: claim "reports.strict.db" \(server\): of data2/data2-pg2, another namespace: reports is not one of its claimers \(claimers of instance data2/data2-pg2: none, its package''s\): the provider lists the namespaces that may claim of it \(claimers of its instance.yaml, else of its package''s provisions\), or the platform routes them through a class of platform.yaml$'
+stderr '^error: reports/reports-strict: db: claim "reports.strict.db" \(server\): of data2/data2-pg2, another namespace: reports is not one of its claimers \(claimers of instance data2/data2-pg2: none, its package''s\): the provider lists the namespaces that may claim of it \(Inputs.Claimers, else its package''s provisions\)$'
 ! exists $WORK/closed-out
 status 1 okdp-compile --repository $WORK/lib --repository $WORK/platform --repository $WORK/tree --repository $WORK/others --repository $WORK/classes -o $WORK/others-out
 stderr '^error: reports/reports-strict: db: claim "reports.strict.db" \(server\): of data2/data2-pg2, the provider of class "second", another namespace: reports is not one of its claimers \(claimers of instance data2/data2-pg2: demo\): the provider lists'
@@ -151,6 +152,7 @@ global:
 -- tree/projects/data/instances/pg/instance.yaml --
 service: pg
 version: 1.0.0
+claimers: ['*']
 -- tree/projects/demo/instances/app/instance.yaml --
 service: app
 version: 1.0.0

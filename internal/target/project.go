@@ -6,6 +6,7 @@ import (
 
 	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-compiler/value"
+	"github.com/okdp/okdp-gitops/tree"
 )
 
 // ProjectAccess: the roles of a project's groups, by group name, and the prefix
@@ -44,13 +45,6 @@ type Project struct {
 	// (flux.ServiceAccount, the rule set's document deployerRole).
 	APIGroups []string
 }
-
-// AccessError: a project's access the compile refuses: ProjectOf gives the
-// rest of the project all the same, no group a role.
-type AccessError struct{ Err error }
-
-func (e *AccessError) Error() string { return e.Err.Error() }
-func (e *AccessError) Unwrap() error { return e.Err }
 
 // controlPlaneOf: the control plane's identity of the platform's settings;
 // nil when not set, and the targets bind none.
@@ -102,15 +96,14 @@ func claimers(namespace string, claims []compiler.Claim) []string {
 	return out
 }
 
-// ProjectOf: the Project of the namespace of in, of its context alone, as
-// the compile of any of its instances gives it: today's settings of the
-// platform and of the project, whether its instances compile or not, for
-// the manifests of a project whose instances are kept. An access that is
-// refused is an *AccessError, the Project given all the same, no group a
-// role in it. Its network policy has the claimers of in.Claims alone: the
-// caller adds those of the project's other providers.
+// ProjectOf: the Project of the namespace of in, of its settings and its
+// groups alone (tree.Groups), as the compile of any of its instances gives
+// it: today's settings of the platform and of the project, whether its
+// instances compile or not, for the manifests of a project whose
+// instances are kept. Its network policy has the claimers of in.Claims
+// alone: the caller adds those of the project's other providers.
 func ProjectOf(in compiler.Inputs) (Project, error) {
-	settings, err := compiler.PlatformOf(context.Background(), in)
+	settings, err := compiler.SettingsOf(context.Background(), in)
 	if err != nil {
 		return Project{}, err
 	}
@@ -118,15 +111,9 @@ func ProjectOf(in compiler.Inputs) (Project, error) {
 	if err != nil {
 		return Project{}, err
 	}
-	p := Project{Namespace: in.Namespace, Privileged: compiler.Privileged(settings, in.Namespace), SecretStore: store, Access: ProjectAccess{GroupPrefix: groupPrefix(settings)}, ControlPlane: controlPlaneOf(settings), Network: networkOf(settings), APIGroups: apiGroups(settings)}
+	p := Project{Namespace: in.Namespace, Privileged: compiler.Privileged(settings, in.Namespace), SecretStore: store, Access: ProjectAccess{Groups: tree.Groups(in), GroupPrefix: groupPrefix(settings)}, ControlPlane: controlPlaneOf(settings), Network: networkOf(settings), APIGroups: apiGroups(settings)}
 	if p.Network != nil {
 		p.Network.Claimers = claimers(in.Namespace, in.Claims)
 	}
-	groups, err := compiler.ProjectGroups(in)
-	if err != nil {
-		p.Access.Groups = map[string]compiler.AccessRole{}
-		return p, &AccessError{err}
-	}
-	p.Access.Groups = groups
 	return p, nil
 }

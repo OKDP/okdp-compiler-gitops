@@ -18,6 +18,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/policy"
 	"github.com/okdp/okdp-compiler/chart"
 )
 
@@ -76,6 +77,10 @@ type parts struct {
 	catalog  *compiler.Catalog      // the packages and the contracts of every repository
 	packages map[[2]string]*compiler.Definition
 	rules    *compiler.RuleSet // the rule set the packages are read for; nil, the mandatory one
+	// check is the host's policy on the global of the layers the platform
+	// does not review (BuildOptions.CheckGlobals); nil checks nothing.
+	check   func(context.Context, policy.GlobalsInput) error
+	globals map[[2]string]M // the keys of global each package declares (declaredGlobals)
 }
 
 // Load returns every instance of the tree that repos make together, sorted
@@ -127,54 +132,76 @@ func (e *packageError) Unwrap() error { return e.err }
 // an error: an *LoadError with every problem, the platform's first, then
 // those of the projects. A problem of a project's own refuses that
 // project alone: Loaded.Refused lists it, and the instances of the other
-// projects load.
+// projects load. What a file sets beyond what its level may set (levels)
+// is a problem of the file's owner.
 func LoadProjects(ctx context.Context, repos []Repository, rules *compiler.RuleSet) (*Loaded, error) {
+	return loadProjects(ctx, repos, rules, nil)
+}
+
+// loadProjects is LoadProjects, the host's policy on the global of the
+// layers the platform does not review given by check (nil checks
+// nothing).
+func loadProjects(ctx context.Context, repos []Repository, rules *compiler.RuleSet, check func(context.Context, policy.GlobalsInput) error) (*Loaded, error) {
 	t, err := index(repos)
 	if err != nil {
 		return nil, newError([]error{err})
 	}
-	t.rules = rules
+	t.rules, t.check = rules, check
 	var platformErrs []error // the problems of the platform's parts and of the packages
 	for _, r := range repos {
 		if r.Role == RoleTree {
 			platformErrs = append(platformErrs, t.checkCatalogs(r)...)
 		}
 	}
-	var platform []compiler.ContextLayer
+	var platform levels
 	if t.platform != nil {
-		platform, err = readLayer(*t.platform, PlatformFile, 0)
+		v, err := readValues(*t.platform, PlatformFile)
 		platformErrs = append(platformErrs, err)
-		// Named claims belong to a project and its namespace. The
-		// platform's connections serve every project, so PlatformFile
-		// declares no claims.
-		for _, l := range platform {
-			if _, set := l.Values["claims"]; set {
-				platformErrs = append(platformErrs, fmt.Errorf("%s: claims: a project's (%s)", where(*t.platform, PlatformFile), ProjectFile))
-			}
+		if v != nil {
+			platform, err = platform.add(layer{level: 0, file: where(*t.platform, PlatformFile), values: v})
+			platformErrs = append(platformErrs, err)
 		}
 	}
 	l := &Loaded{}
 	for _, project := range slices.Sorted(maps.Keys(t.projects)) {
 		repo := *t.projects[project]
 		dir := path.Join(ProjectsDir, project)
+		file := path.Join(dir, ProjectFile)
 		var own []error // the project's own problems
-		layer, err := readProject(repo, path.Join(dir, ProjectFile))
-		layers := append(slices.Clone(platform), layer...)
+		ls := platform
+		ls.namespace = project
+		values, err := readProject(repo, file)
 		own = append(own, err)
-		readable := err == nil
+		readable := err == nil // its file reads and sets what level 1 may
+		var groups map[string]compiler.AccessRole
+		if readable {
+			if values != nil {
+				ls, err = ls.add(layer{level: 1, file: where(repo, file), values: values})
+				own = append(own, err)
+				readable = err == nil
+			}
+			groups, err = projectAccess(where(repo, file), values, project)
+			own = append(own, err)
+			readable = readable && err == nil
+		}
+		in := withGroups(compiler.Inputs{Rules: t.rules, Contracts: t.catalog.Contracts(), Values: slices.Clip(ls.layers), Namespace: project}, groups)
+		if readable && values != nil {
+			err := globalsCheck(ctx, t.check, in, where(repo, file), values)
+			own = append(own, err)
+			readable = err == nil
+		}
 		names, err := dirs(repo, path.Join(dir, InstancesDir))
 		own = append(own, err)
 		// A project without instances has no compile to check its
 		// declarations. Check them here.
-		if err == nil && len(names) == 0 && layer != nil {
-			in := compiler.Inputs{Contracts: t.catalog.Contracts(), Context: slices.Clip(layers), Namespace: project}
+		if err == nil && len(names) == 0 && values != nil && readable {
 			for _, err := range unjoin(compiler.CheckDeclarations(ctx, in)) {
-				own = append(own, fmt.Errorf("%s: %w", where(repo, path.Join(dir, ProjectFile)), err))
+				own = append(own, fmt.Errorf("%s: %w", where(repo, file), err))
 			}
 		}
 		var instances []compiler.Instance
 		for _, name := range names {
-			inst, err := t.instance(repo, project, name, slices.Clip(layers))
+			inst, err := t.instance(ctx, repo, project, name, ls, groups)
 			if pe, ok := errors.AsType[*packageError](err); ok {
 				// This is the catalog's problem, not the project's.
 				platformErrs = append(platformErrs, pe)
@@ -187,9 +214,9 @@ func LoadProjects(ctx context.Context, repos []Repository, rules *compiler.RuleS
 			instances = append(instances, inst)
 		}
 		if r := refusal(project, own); r != nil {
-			r.Inputs = compiler.Inputs{Contracts: t.catalog.Contracts(), Context: slices.Clip(slices.Clone(platform)), Namespace: project}
+			r.Inputs = compiler.Inputs{Contracts: t.catalog.Contracts(), Values: slices.Clip(slices.Clone(platform.layers)), Namespace: project}
 			if readable {
-				r.Inputs.Context, r.Own = slices.Clip(layers), true
+				r.Inputs.Values, r.Inputs.Settings, r.Own = slices.Clip(ls.layers), GroupsSettings(groups), true
 			}
 			l.Refused = append(l.Refused, *r)
 			continue
@@ -220,12 +247,12 @@ func refusal(project string, errs []error) *Refused {
 	return &Refused{Namespace: project, Problems: e.Problems, Errs: e.errs}
 }
 
-// instance loads the instance name of project from repo. layers are the
-// context layers below its own. Without claimers in its InstanceFile,
-// Inputs.Claimers is nil and the package's claimers apply. The instance
-// comes without its Definition when its package already failed for an
-// instance before it.
-func (t *parts) instance(repo Repository, project, name string, layers []compiler.ContextLayer) (compiler.Instance, error) {
+// instance loads the instance name of project from repo. ls holds the
+// layers below its own, groups the roles of its project's groups.
+// Without claimers in its InstanceFile, Inputs.Claimers is nil and the
+// package's claimers apply. The instance comes without its Definition
+// when its package already failed for an instance before it.
+func (t *parts) instance(ctx context.Context, repo Repository, project, name string, ls levels, groups map[string]compiler.AccessRole) (compiler.Instance, error) {
 	dir := path.Join(ProjectsDir, project, InstancesDir, name)
 	if err := instanceFiles(repo, dir); err != nil {
 		return compiler.Instance{}, err
@@ -255,24 +282,40 @@ func (t *parts) instance(repo Repository, project, name string, layers []compile
 		}
 		return compiler.Instance{}, err
 	}
-	connections, err := readLayer(repo, path.Join(dir, ConnectionsFile), 2)
+	var errs []error
+	connectionsFile := path.Join(dir, ConnectionsFile)
+	connections, err := readValues(repo, connectionsFile)
 	if err != nil {
 		return compiler.Instance{}, err
 	}
-	for _, l := range connections {
-		for _, k := range slices.Sorted(maps.Keys(l.Values)) {
+	if connections != nil {
+		for _, k := range slices.Sorted(maps.Keys(connections)) {
 			if k != "connections" {
-				return compiler.Instance{}, fmt.Errorf("%s: %s: the instance's own connections only (connections): the rest of the context is the platform's or the project's", where(repo, path.Join(dir, ConnectionsFile)), k)
+				return compiler.Instance{}, fmt.Errorf("%s: %s: the instance's own connections only (connections): the rest of the context is the platform's or the project's", where(repo, connectionsFile), k)
 			}
 		}
+		ls, err = ls.add(layer{level: 2, file: where(repo, connectionsFile), values: connections})
+		errs = append(errs, err)
 	}
-	values, err := readLayer(repo, path.Join(dir, ConfigFile), 0)
+	configFile := path.Join(dir, ConfigFile)
+	values, err := readValues(repo, configFile)
 	if err != nil {
 		return compiler.Instance{}, err
 	}
-	in := compiler.Inputs{Contracts: t.catalog.Contracts(), Context: append(layers, connections...), Release: ReleaseName(project, name), Namespace: project, Claimers: pkg.Claimers}
-	for _, l := range values {
-		in.Values = append(in.Values, l.Values)
+	in := withGroups(compiler.Inputs{Contracts: t.catalog.Contracts(), Values: slices.Clip(ls.layers), Release: ReleaseName(project, name), Namespace: project, Claimers: pkg.Claimers}, groups)
+	if values != nil {
+		errs = append(errs, checkConfig(where(repo, configFile), values, t.declared(pkg.Service, pkg.Version, def)))
+		in.Values = append(in.Values, values)
+	}
+	if err := errors.Join(errs...); err != nil {
+		return compiler.Instance{}, err
+	}
+	if values != nil {
+		checked := in
+		checked.Rules = t.rules
+		if err := globalsCheck(ctx, t.check, checked, where(repo, configFile), values); err != nil {
+			return compiler.Instance{}, err
+		}
 	}
 	return compiler.Instance{Definition: def, Inputs: in, Name: name}, nil
 }
@@ -399,6 +442,18 @@ func (t *parts) definition(service, version string) (*compiler.Definition, error
 	return def, nil
 }
 
+// declared returns the keys of global that the package of service and
+// version, def, declares, read once (declaredGlobals).
+func (t *parts) declared(service, version string, def *compiler.Definition) M {
+	key := [2]string{service, version}
+	if g, ok := t.globals[key]; ok {
+		return g
+	}
+	g := declaredGlobals(def)
+	t.globals[key] = g
+	return g
+}
+
 // index records the owner of each part of the tree. It reads the
 // repositories in name order and reports every conflict at once, those of
 // the parts in two repositories last, sorted by part. The catalog that the
@@ -409,7 +464,7 @@ func (t *parts) definition(service, version string) (*compiler.Definition, error
 // file, an empty directory); the rest of the catalog is still read.
 func index(repos []Repository) (*parts, error) {
 	repos = slices.SortedFunc(slices.Values(repos), func(a, b Repository) int { return strings.Compare(a.Name, b.Name) })
-	t := &parts{projects: map[string]*Repository{}, packages: map[[2]string]*compiler.Definition{}}
+	t := &parts{projects: map[string]*Repository{}, packages: map[[2]string]*compiler.Definition{}, globals: map[[2]string]M{}}
 	var errs []error
 	var catalogs []compiler.CatalogFiles
 	owners := map[string][]string{} // a part, as messages name it: the repositories that have it
@@ -498,9 +553,9 @@ func dirs(repo Repository, dir string) ([]string, error) {
 	return names, nil
 }
 
-// readLayer reads a values file as a context layer of the given level. It
-// returns no layer when the file does not exist.
-func readLayer(repo Repository, file string, level uint) ([]compiler.ContextLayer, error) {
+// readValues reads a values file. It returns no values when the file
+// does not exist.
+func readValues(repo Repository, file string) (M, error) {
 	b, err := fs.ReadFile(repo.FS, file)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -512,23 +567,21 @@ func readLayer(repo Repository, file string, level uint) ([]compiler.ContextLaye
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", where(repo, file), err)
 	}
-	return []compiler.ContextLayer{{Level: level, Values: v}}, nil
+	return v, nil
 }
 
-// readProject reads a project's file as the context layer of level 1. It
-// removes ProjectDescription, which must be a string or null: no instance
+// readProject reads a project's file, the layer of level 1. It removes
+// ProjectDescription, which must be a string or null: no instance
 // receives it.
-func readProject(repo Repository, file string) ([]compiler.ContextLayer, error) {
-	layers, err := readLayer(repo, file, 1)
-	for _, l := range layers {
-		if d, set := l.Values[ProjectDescription]; set {
-			if _, isString := d.(string); !isString && d != nil {
-				return nil, fmt.Errorf("%s: %s: a string, the project's description", where(repo, file), ProjectDescription)
-			}
-			delete(l.Values, ProjectDescription)
+func readProject(repo Repository, file string) (M, error) {
+	v, err := readValues(repo, file)
+	if d, set := v[ProjectDescription]; set {
+		if _, isString := d.(string); !isString && d != nil {
+			return nil, fmt.Errorf("%s: %s: a string, the project's description", where(repo, file), ProjectDescription)
 		}
+		delete(v, ProjectDescription)
 	}
-	return layers, err
+	return v, err
 }
 
 func where(repo Repository, p string) string { return path.Join(repo.Name, p) }

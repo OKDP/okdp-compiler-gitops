@@ -27,7 +27,7 @@ func TestReadCompiled(t *testing.T) {
 		Chart:  chart.Metadata{APIVersion: "v2", Name: "db", Version: "1.2.0", Dependencies: []chart.Dependency{{Name: "app", Repository: app.Repository, Version: app.Version}}},
 		Info:   info,
 	}
-	files, err := Umbrella{}.Files([]*compiler.Result{res, {Namespace: "data", Release: "data-plain", Values: map[string]map[string]any{}, Chart: chart.Metadata{APIVersion: "v2", Name: "plain", Version: "0.1.0"}}}, nil)
+	files, err := Umbrella{}.Files([]*compiler.Result{res, {Namespace: "data", Release: "data-plain", Values: map[string]map[string]any{}, Chart: chart.Metadata{APIVersion: "v2", Name: "plain", Version: "0.1.0"}}}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

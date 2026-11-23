@@ -39,6 +39,9 @@ type (
 	Flux = flux.Target
 	// ArgoCD: the Helm target's files, with Argo CD's.
 	ArgoCD = argocd.Target
+	// ProjectGroups: the roles of each project's groups, by namespace,
+	// what a target writes a project's access from (GroupsOf).
+	ProjectGroups = target.ProjectGroups
 	// ReleaseError: a release name in two namespaces or more.
 	ReleaseError = target.ReleaseError
 	// ArgoSource: the repository and revision Argo CD reads a tree from.
@@ -164,6 +167,10 @@ func ReleaseTaken(t *tree.Tree, namespace, name string) *tree.Instance {
 	return output.ReleaseTaken(t, namespace, name)
 }
 
+// GroupsOf: the roles of the groups of the projects of instances, as the
+// tree gives them (tree.Groups), for a target's Files.
+func GroupsOf(instances []compiler.Instance) ProjectGroups { return target.GroupsOf(instances) }
+
 // CheckReleases: nil when every release name of results is in one namespace.
 func CheckReleases(results []*compiler.Result) error { return target.Releases(results) }
 
@@ -194,17 +201,18 @@ func ReadCompiled(output fs.FS, namespace, release string) (*Compiled, error) {
 func Write(res *compiler.Result) (map[string][]byte, error) { return helm.WriteValues(res) }
 
 // ProjectAccess: the roles of the groups of the project of namespace, file
-// its project.yaml as written (nil: none), for a program that mirrors the
-// project's authority. set is the rule set it compiles with; nil, the
-// standard one, as Build.
+// its project.yaml as written (nil: none), as the tree reads them
+// (tree.ProjectAccess, its default group an editor), for a program that
+// mirrors the project's authority. set is the rule set it compiles with;
+// nil, the standard one, as Build.
 func ProjectAccess(set *compiler.RuleSet, file []byte, namespace string) (map[string]compiler.AccessRole, error) {
 	set = rules.Or(set)
-	if err := compiler.CheckProjectName(context.Background(), set, namespace, nil); err != nil {
+	if err := compiler.CheckNamespace(context.Background(), set, namespace, nil); err != nil {
 		return nil, err
 	}
 	values, err := compiler.ParseValues(file)
 	if err != nil {
 		return nil, err
 	}
-	return compiler.ParseAccess(set, values[compiler.ProjectAccessKey], namespace)
+	return tree.ProjectAccess(values, namespace)
 }

@@ -50,7 +50,7 @@ metadata:
 {{- end }}
 `)},
 	}
-	settings := compiler.ContextLayer{Level: 0, Values: map[string]any{"global": map[string]any{"okdp": map[string]any{"ingress": map[string]any{"suffix": "okdp.sandbox"}}}}}
+	settings := map[string]any{"global": map[string]any{"okdp": map[string]any{"ingress": map[string]any{"suffix": "okdp.sandbox"}}}}
 	for name, tc := range map[string]struct {
 		values string // the deployed and given upstream values of the key app
 		want   string // "" when it passes
@@ -66,7 +66,7 @@ metadata:
 			if err := yaml.Unmarshal([]byte(tc.values), &given); err != nil {
 				t.Fatal(err)
 			}
-			ti := &tree.Instance{Name: "web", Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "demo", Release: "demo-web", Context: []compiler.ContextLayer{settings}, Values: []map[string]any{{"upstream": given}}}}
+			ti := &tree.Instance{Name: "web", Inputs: compiler.Inputs{Rules: rules.Standard(), Namespace: "demo", Release: "demo-web", Values: []map[string]any{settings, {"upstream": given}}}}
 			files := map[string][]byte{
 				"projects/demo/instances/demo-web/Chart.yaml":           []byte("dependencies:\n  - {name: app, repository: https://charts.example.org, version: 1.0.0}\n"),
 				"projects/demo/instances/demo-web/instance.values.yaml": []byte(tc.values),

@@ -4,7 +4,6 @@ import (
 	"github.com/okdp/okdp-gitops/tree"
 
 	"bytes"
-	"context"
 	"errors"
 	"flag"
 	"io/fs"
@@ -15,16 +14,16 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	"go.yaml.in/yaml/v3"
 
 	compiler "github.com/okdp/okdp-compiler"
 	"github.com/okdp/okdp-compiler/chart"
 
-	"github.com/okdp/okdp-compiler-security/policy"
-
 	"github.com/okdp/okdp-gitops/deploy"
 	"github.com/okdp/okdp-gitops/internal/chartcheck"
 	"github.com/okdp/okdp-gitops/internal/helmvalues"
-	"github.com/okdp/okdp-gitops/rules"
 )
 
 var update = flag.Bool("update", false, "rewrite the examples' outputs from the current compiler")
@@ -36,17 +35,22 @@ var update = flag.Bool("update", false, "rewrite the examples' outputs from the 
 const examples = "examples"
 
 // load: every instance of an example's tree, its input/db/ one
-// repository (tree.Load).
+// repository, as deploy.Build loads it (the standard rule set, Helm's
+// merge, the platform's policy on the globals of the projects and the
+// instances): a project that does not load fails.
 func load(t *testing.T, example string) []compiler.Instance {
 	t.Helper()
 	db := filepath.Join(examples, example, "input", "db")
-	instances, err := tree.Load(context.Background(), []tree.Repository{{Name: db, FS: os.DirFS(db), Role: tree.RoleTree}}, rules.Standard())
+	built, err := deploy.Build(t.Context(), []tree.Repository{{Name: db, FS: os.DirFS(db), Role: tree.RoleTree}}, deploy.BuildOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := range instances {
-		instances[i].Inputs.Rules, instances[i].Inputs.Finalize = rules.Standard(), helmvalues.New(nil)
-		instances[i].Inputs.CheckGlobals = policy.CheckGlobals
+	if le := tree.LoadErrorOf(built); le != nil {
+		t.Fatal(le)
+	}
+	var instances []compiler.Instance
+	for _, ti := range built.Instances {
+		instances = append(instances, ti.Instance)
 	}
 	return instances
 }
@@ -59,24 +63,6 @@ func exists(t *testing.T, path string) bool {
 		t.Fatal(err)
 	}
 	return err == nil
-}
-
-// readLayers: values files, as values layers.
-func readLayers(t *testing.T, files []string) []map[string]any {
-	t.Helper()
-	var layers []map[string]any
-	for _, f := range files {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		v, err := chart.ParseValues(b)
-		if err != nil {
-			t.Fatalf("%s: %v", f, err)
-		}
-		layers = append(layers, v)
-	}
-	return layers
 }
 
 // TestExample compiles the instances of each example's tree together
@@ -134,7 +120,7 @@ func compileTree(t *testing.T, instances []compiler.Instance) (map[string][]byte
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := deploy.Helm{}.Files(results, g)
+	files, err := deploy.Helm{}.Files(results, g, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,15 +174,17 @@ func checkDir(t *testing.T, dir string, files map[string][]byte) {
 	}
 }
 
-// TestExampleErrors: on the instance demo-webapp of 02_advanced (load), every
+// TestExampleErrors: on the instance demo-webapp of 02_advanced, every
 // testdata/<case>.yaml, an instance file in place of its config.yaml, and
-// every testdata/context/<level>/<case>.yaml, a context file of that level
-// after the tree's, without config.yaml, must fail with the message of its
-// first line (# error: ..., \n for a line break). A context file may set
-// parameters too: those of level 2, an instance's own connections,
-// reference the connections they give. Its key platform, when it has one,
-// is a layer of level 0 the case needs (the platform's secret store), set
-// before its own: a level above 0 sets no platform setting.
+// every testdata/context/<level>/<case>.yaml, a file of that level
+// without config.yaml, must fail the tree (deploy.Build: it does not
+// load, or the instance is refused) with the message of its first line
+// (# error: ..., \n for a line break). A context file of level 0 is
+// merged over platform.yaml, one of level 1 is demo's project.yaml, one
+// of level 2 webapp's connections.yaml, its other keys its config.yaml:
+// the parameters that reference the connections it gives. Its key
+// platform, when it has one, is merged over platform.yaml: a setting of
+// the platform's the case needs (its secret store).
 func TestExampleErrors(t *testing.T) {
 	testdata := "testdata"
 	values, _ := filepath.Glob(filepath.Join(testdata, "*.yaml"))
@@ -204,6 +192,8 @@ func TestExampleErrors(t *testing.T) {
 	if len(values) == 0 || len(context) == 0 {
 		t.Fatal("no testdata")
 	}
+	db := filepath.Join(examples, "02_advanced", "input", "db")
+	webapp := "projects/demo/instances/webapp"
 	for _, f := range slices.Concat(values, context) {
 		name, _ := filepath.Rel(testdata, f)
 		t.Run(strings.TrimSuffix(name, ".yaml"), func(t *testing.T) {
@@ -217,28 +207,87 @@ func TestExampleErrors(t *testing.T) {
 				t.Fatalf("first line must be \"# error: <message>\", got %q", first)
 			}
 			want = strings.ReplaceAll(want, `\n`, "\n")
-			var webapp compiler.Instance
-			for _, inst := range load(t, "02_advanced") {
-				if inst.Inputs.Release == "demo-webapp" {
-					webapp = inst
-				}
+			src := readTree(t, db)
+			layer, err := chart.ParseValues(b)
+			if err != nil {
+				t.Fatal(err)
 			}
-			in := webapp.Inputs
-			if level, err := strconv.ParseUint(filepath.Base(filepath.Dir(f)), 10, 0); err == nil {
-				for _, l := range readLayers(t, []string{f}) {
-					if p, ok := l["platform"].(map[string]any); ok {
-						in.Context = append(in.Context, compiler.ContextLayer{Level: 0, Values: p})
-						delete(l, "platform")
-					}
-					in.Context = append(in.Context, compiler.ContextLayer{Level: uint(level), Values: l})
-				}
-				in.Values = nil
+			level, err := strconv.ParseUint(filepath.Base(filepath.Dir(f)), 10, 0)
+			if err != nil {
+				src[webapp+"/config.yaml"] = &fstest.MapFile{Data: b}
 			} else {
-				in.Values = readLayers(t, []string{f})
+				delete(src, webapp+"/config.yaml")
+				if p, ok := layer["platform"].(map[string]any); ok {
+					mergeFile(t, src, tree.PlatformFile, p)
+					delete(layer, "platform")
+				}
+				switch level {
+				case 0:
+					mergeFile(t, src, tree.PlatformFile, layer)
+				case 1:
+					writeFile(t, src, "projects/demo/project.yaml", layer)
+				case 2:
+					connections := map[string]any{"connections": layer["connections"]}
+					delete(layer, "connections")
+					writeFile(t, src, webapp+"/connections.yaml", connections)
+					writeFile(t, src, webapp+"/config.yaml", layer)
+				}
 			}
-			if _, err := compiler.Compile(t.Context(), webapp.Definition, in); err == nil || !strings.Contains(err.Error(), want) {
-				t.Errorf("got %v, want an error containing %q", err, want)
+			built, err := deploy.Build(t.Context(), []tree.Repository{{Name: "db", FS: src, Role: tree.RoleTree}}, deploy.BuildOptions{})
+			var got []string
+			if err != nil {
+				got = append(got, err.Error())
+			} else {
+				if le := tree.LoadErrorOf(built); le != nil {
+					got = append(got, le.Error())
+				}
+				if ti := built.Instance("demo", "webapp"); ti != nil && ti.Err() != nil {
+					got = append(got, ti.Err().Error())
+				}
+			}
+			if all := strings.Join(got, "\n"); !strings.Contains(all, want) {
+				t.Errorf("got %s, want an error containing %q", all, want)
 			}
 		})
 	}
+}
+
+// readTree: the files under dir, by path.
+func readTree(t *testing.T, dir string) fstest.MapFS {
+	t.Helper()
+	out := fstest.MapFS{}
+	err := filepath.WalkDir(dir, func(p string, e fs.DirEntry, err error) error {
+		if err != nil || e.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(p)
+		rel, _ := filepath.Rel(dir, p)
+		out[filepath.ToSlash(rel)] = &fstest.MapFile{Data: b}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// writeFile: values as the file name of src.
+func writeFile(t *testing.T, src fstest.MapFS, name string, values map[string]any) {
+	t.Helper()
+	b, err := yaml.Marshal(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src[name] = &fstest.MapFile{Data: b}
+}
+
+// mergeFile: values merged over the file name of src, as the compile
+// merges values layers (compiler.MergeValues).
+func mergeFile(t *testing.T, src fstest.MapFS, name string, values map[string]any) {
+	t.Helper()
+	base, err := chart.ParseValues(src[name].Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, src, name, compiler.MergeValues(base, values))
 }

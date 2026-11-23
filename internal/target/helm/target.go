@@ -23,7 +23,7 @@ type Target struct{}
 // Files: the files of WriteValues of each result, in its target.InstanceDir.
 // A release too long for the release of its objects is refused. The graph
 // is not read.
-func (Target) Files(results []*compiler.Result, _ *tree.Graph) (map[string][]byte, error) {
+func (Target) Files(results []*compiler.Result, _ *tree.Graph, _ target.ProjectGroups) (map[string][]byte, error) {
 	return files(results, func(res *compiler.Result) (map[string][]byte, error) {
 		written, err := WriteValues(res)
 		if _, ok := written[ObjectsValues]; ok && len(res.Release) > ReleaseMax {
@@ -60,7 +60,7 @@ type Umbrella struct {
 
 // Files: the files of Write of each result, in its target.InstanceDir,
 // each chart of the compile vendored (Vendor). The graph is not read.
-func (u Umbrella) Files(results []*compiler.Result, _ *tree.Graph) (map[string][]byte, error) {
+func (u Umbrella) Files(results []*compiler.Result, _ *tree.Graph, _ target.ProjectGroups) (map[string][]byte, error) {
 	return files(results, func(res *compiler.Result) (map[string][]byte, error) {
 		written, err := Write(res)
 		if err != nil {

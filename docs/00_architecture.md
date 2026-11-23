@@ -71,13 +71,13 @@ the latest sources.
 | `cmd/okdp-gitops/sources.go` | the record of the output, `sources.yaml`: what a compile read (`record`, `writeRecord`), the run that stops when it holds (`upToDate`, the refs listed without a fetch, `listRefs`); the revision a kept project's output is the compile of, reported (`keptSince`, `reportKept`) |
 | `deploy/` | `Build`, `tree.Build` with the standard rule set (`rules.Standard`), `helmvalues.New` (`helmvalues.WithoutRender` with `BuildOptions.SkipRender`) and the security set's `policy.CheckGlobals`, each unless the caller gives another, and with `BuildOptions.Charts` the upstream charts of every `Chart.yaml` of the tree fetched before the compile (`tree.BuildOptions.Loaded`); `ChartSource`, `Charts`, `StaticCharts`, `NewCharts`, `CoalesceValues`; the targets, `TreeFiles`, the files of a compile, and what reads them back |
 | `rules/` | `Standard`, the compiler's mandatory rule set with the security set added (`security.Rules`), and `Or`, a caller's set or it |
-| `tree/` | the tree of the deployments loaded from its repositories (`Load`, `LoadProjects`: the parts and their roles, `platform.yaml`, `project.yaml`, the instances' files, `catalogs.yaml` and its menu, `CheckMenu`), the packages and contracts through `compiler.LoadCatalog` on each repository's `catalog/` and `contracts/`; compiled together (`Compile`: `compiler.CompileAll`, then the deployment graph, `internal/graph`, `NewGraph`); `Build`, the load and the compile with `BuildOptions`; the projects kept (`Partial`), what a change broke (`Regressions`), the problems of a load (`LoadError`, `AddedProblems`, `LoadErrorOf`) |
+| `tree/` | the tree of the deployments loaded from its repositories (`Load`, `LoadProjects`: the parts and their roles, `platform.yaml`, `project.yaml`, the instances' files, `catalogs.yaml` and its menu, `CheckMenu`), what each file may set by its level, enforced before the compiler receives the files as flat values layers (`levels.go`: a level changes nothing of a lower one, `global.okdp` and `global` above level 0, claims, template code, a connection's `remoteKey`, an instance's `config.yaml`; `BuildOptions.CheckGlobals`), the roles of a project's groups (`ProjectAccess`, `DefaultProjectGroup`, given in the compiler's `Inputs.Settings`: `GroupsSettings`, `Groups`; `platform.yaml` does not set `global.okdp.access.groups`), the packages and contracts through `compiler.LoadCatalog` on each repository's `catalog/` and `contracts/`; compiled together (`Compile`: `compiler.CompileAll`, then the deployment graph, `internal/graph`, `NewGraph`); `Build`, the load and the compile with `BuildOptions`; the projects kept (`Partial`), what a change broke (`Regressions`), the problems of a load (`LoadError`, `AddedProblems`, `LoadErrorOf`) |
 | `treeedit/` | the tree read (`ReadSources`, the readers), the edits and their checks (`Apply`, `Check.Verify`), the output as a tree (`OutputTargets`, `OutputFS`, `WriteOutput`) |
 | `chartcache/` | the chart cache, a chart source (`Get`, `FS`): a chart pulled once and kept whole, with its archive, bounded (`NewCache`, `NewRepositoryPuller`, `Archive`); `ChartDir`, `chartdir.Of` |
 | `internal/chartcheck/` | the final values checked against the upstream charts, which the compiler does not read: `Source` (`Get`, `FS`), `Static`, a cache filled already; `Charts`, the charts of one build (`New`, `Fetch`, `Failed`, `Failures`, `FS`, `Check`); `Coalesce`, Helm's `chartutil.CoalesceValues` |
 | `internal/chartdir/` | the layout of a chart cache, `Of` (`<repository without scheme>/<chart>-<version>/<chart>`), and the `helm pull` that fills it by hand, `Pull` |
 | `internal/render/` | a chart rendered with its final values (Helm SDK, no cluster), read at its `chartdir.Of`, checked by `internal/helmvalues` (the render's policy) |
-| `internal/target/` | the targets: `helm` (`Target`, values; `Umbrella`, a chart), `flux`, `argocd`, and what they share (a project's manifests, the directories, the checks of their options) |
+| `internal/target/` | the targets: `helm` (`Target`, values; `Umbrella`, a chart), `flux`, `argocd`, and what they share (a project's manifests, the roles of its groups as the tree gives them, `ProjectGroups`, the directories, the checks of their options) |
 | `internal/output/` | the files of a tree for its targets, the projects kept (`tree.Partial`) and what is re-derived of them |
 | `internal/helmvalues/` | `compiler.FinalValues` with the security set's `policy.UpstreamCheck`, then `Charts.Check`, then `CheckRendered` and `policy.PlainUpstream`, the compile running the hook `finalValues` on what it returns; `CheckRendered`, the charts a project gives upstream values to rendered, refused when they could not be fetched, their manifests through `compiler.CheckObjects` |
 | `internal/outdir/`, `internal/dirfs/`, `internal/helmtest/` | the output directory of `okdp-compile` and its mark; the directories it reads, bounded, no symbolic link followed; the tests' Helm |
@@ -205,10 +205,13 @@ the run start again, every repository read anew, up to 5 times.
 ### The compiler compiles, okdp-gitops deploys
 
 The compiler holds what a claim needs to bind: the packages, the
-context, the claims, the dependencies, Helm's merge of the final values.
-Everything else about a platform is here: the tree and its layout
-(package `tree`: its repositories and their roles, the instances' files,
-the order of the releases, the projects kept), the rules, as data and as
+values, the claims, the dependencies, Helm's merge of the final values.
+It takes an instance's values as flat layers and knows nothing of where
+each comes from. Everything else about a platform is here: the tree and
+its layout (package `tree`: its repositories and their roles, the
+instances' files, what each file may set by its origin, the platform's,
+a project's or an instance's, the roles of a project's groups, the order
+of the releases, the projects kept), the rules, as data and as
 a policy over the final values, the checks of the final values against
 the upstream charts, and the files a deployer reads. A CLI run and the control plane's checks agree by
 construction, each compiling with `deploy.Build`. It gives the compiler

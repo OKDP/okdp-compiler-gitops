@@ -12,13 +12,13 @@ where in it. How the tree compiles is in [the compile](02_compile.md),
 the output in [the output](03_output.md).
 
 ```text
-platform.yaml                          the platform's part: the context of every instance, level 0
+platform.yaml                          the platform's part: the values of every instance, level 0
 catalogs.yaml                          the catalog repositories; the console's menu
 contracts/<contract>.schema.json       a catalog's part: the contracts (Inputs.Contracts)
 catalog/<service>/<version>/           a catalog's part: a package (compiler.Definition)
 projects.yaml                          okdp-gitops', split topology only: the projects
 projects/<project>/                    a project's part: a namespace (Inputs.Namespace)
-  project.yaml                         the context of its instances, level 1; its description, its access
+  project.yaml                         the values of its instances, level 1; its description, its access
   instances/<instance>/                an instance: the release <project>-<instance> (Inputs.Release)
     instance.yaml                      {service, version}; claimers, optional
     config.yaml                        optional: its values (Inputs.Values)
@@ -35,14 +35,15 @@ read for the compile of the instances it is for:
 - `instance.yaml` holds `service` and `version`, the instance's package,
   `catalog/<service>/<version>/`, and, optional, `claimers`, nothing
   else: the namespaces whose instances may claim of it, a provider, from
-  another namespace, by naming it or through a class of their project's
-  (`claimers: [demo]`, `["*"]` for any; absent, its package's,
-  `provisions`, none by default), a class of `platform.yaml` needing none
+  another namespace, by naming it or through a class, the platform's or
+  their project's (`claimers: [demo]`, `["*"]` for any; absent, its
+  package's, `provisions`, none by default): a class routes a claim, it
+  does not consent for the provider
   ([providers](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#providers)).
   Its `Chart.yaml` must have that `name` and `version`; a released
   version directory is immutable: a change is a new version.
-- The context has a file per level
-  ([levels](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#levels)): 0 `platform.yaml`, the platform values
+- The values of an instance have a file per level ([the
+  levels](#the-levels)): 0 `platform.yaml`, the platform values
   (`global.okdp`, the classes of the claims and their default among it,
   the platform's secret store, the connections every instance may
   reference); 1 `project.yaml`, what a project adds for its instances
@@ -58,17 +59,25 @@ read for the compile of the instances it is for:
   ([connections](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#connections),
   [claims](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#claims)).
 - `project.yaml` may describe its project, `description: <text>`, a
-  string: the project's own, which is no value of the context, and which
-  no instance receives (`tree.ProjectDescription`). It may give its
-  people their roles, `access: {<group>: viewer|editor|admin}`, the
-  identity provider's groups: absent, `okdp-project-<project>` is an
-  editor; `{}`, no group. No instance receives it: the targets write it
-  as the Argo CD roles of the project's AppProject and the RoleBindings
-  of its namespace ([the output](03_output.md)). Whoever writes
-  `project.yaml` sets it: in a repository of its own (the split
-  topology), its writers, the project's administrators.
+  string: the project's own, which is no value of its instances, and
+  which no instance receives (`tree.ProjectDescription`). It may give
+  its people their roles, `access: {<group>: viewer|editor|admin}`, the
+  identity provider's groups (`tree.ProjectAccess`): absent or null,
+  `okdp-project-<project>` is an editor (`tree.DefaultProjectGroup`);
+  `{}`, no group. No other file gives it, and no instance receives it
+  as a value: the tree gives it every instance of the project as its
+  groups, the setting `global.okdp.access.groups` in the compiler's
+  host settings (`tree.GroupsSettings`, `Inputs.Settings`), which no
+  chart receives and a mapping reads in `platform.access`, and the
+  targets write it as the Argo CD roles of the project's
+  AppProject and the RoleBindings of its namespace ([the
+  output](03_output.md)). Whoever writes `project.yaml` sets it: in a
+  repository of its own (the split topology), its writers, the
+  project's administrators.
 - `config.yaml` is the instance values: its parameters and upstream
-  values, no `connections`, no `claims`. An instance's directory holds
+  values, of `global` only the keys its package's parameter schema
+  declares, no `connections`, no `claims`, no `access` ([the
+  levels](#the-levels)). An instance's directory holds
   `instance.yaml`, `config.yaml` and `connections.yaml` only: another
   entry, a `values.yaml`, a directory, a hidden file, would be read by
   no compile, and is refused, each named.
@@ -105,6 +114,65 @@ anything, fails the compile, the repository and the link named
 must not hold`). A link beside the tree, in a repository that holds other
 things, is no problem. A file of the tree weighs 4 MiB at most, the tree
 64 MiB ([security boundaries](../00_architecture.md#security-boundaries)).
+
+## The levels
+
+okdp-compiler takes the values of an instance as flat layers
+(`Inputs.Values`), merged in order as `helm -f` merges files, any of
+them setting anything. Where each layer comes from is the tree's to
+know, and what each may set the tree's to enforce: `tree.Load`, and
+every build, the control plane's and the CI's, refuse a file that sets
+more than its level may, a problem of the file's owner (the platform's
+fails the tree, a project's refuses that project, `tree.Refused`),
+before any instance compiles. A project without instances is checked
+alike. Then the layers are given to the compiler in their order:
+`platform.yaml`, `project.yaml` (without its `description` and its
+`access`), the instance's `connections.yaml`, its `config.yaml`; an
+absent file gives none.
+
+- A level adds values and changes none a lower level sets, even to the
+  same value, a null included: a file of level 1 or 2 refused for a
+  value of a lower level names it and the file that sets it. A
+  connection (`connections.<name>`), a named claim (`claims.<name>`), a
+  class (`global.okdp.provisioning.<contract>.classes.<class>`) and the
+  default class of a contract
+  (`global.okdp.provisioning.<contract>.default`) are each taken whole:
+  a level adds connections, claims and classes beside the lower levels',
+  and the classes and default of the contracts they leave out.
+- Of `global.okdp`, the platform's settings, a file above level 0 sets
+  `provisioning` alone, its classes, whether the platform sets a key or
+  not, and nothing else, `global.okdp` itself being a map.
+- Of the rest of `global`, which every chart of the instances receives
+  past their packages' protect, a file above level 0 sets only the keys
+  `platform.yaml` lists in `global.okdp.policy.projectGlobals`
+  (absent, `project` and `storageClass`; `[]`, none), each refusal a
+  field problem at `global.<key>` (`compiler.FieldErrors`), privileged
+  project or not.
+- `platform.yaml` declares no named claim; `access` is `project.yaml`'s
+  alone, and so is `global.okdp.access.groups`, which the tree gives:
+  `platform.yaml` does not set it.
+- Only `platform.yaml` gives template code (`{{`), reviewed with the
+  platform: under no key of a project's file nor of an instance's.
+- A connection above level 0 whose credentials are in the platform's
+  secret store (`secretRef: {remoteKey}`) names a key of its own
+  namespace, `<project>/...`: the platform's keys are read through the
+  platform's connections. A field problem at `connections.<name>`.
+- `config.yaml` sets of `global` only the keys its package's parameter
+  schema declares (`properties.global.properties` of
+  `config.schema.json`), never `okdp`; no `connections` (an instance's
+  own are its `connections.yaml`), no `claims` (its project's), no
+  `access`, no template code.
+- With `BuildOptions.CheckGlobals` (`deploy.Build`:
+  `policy.CheckGlobals`, the security set's upstream policy), the
+  `global` of `project.yaml` and of `config.yaml` is checked as the
+  upstream values are, with the settings of the project's values: an
+  image of a registry the platform does not list, a key of a pod's
+  privileges, at any depth, refused at its field, a privileged project
+  excepted. `tree.Load` runs no policy.
+
+The compiler checks the rest, whatever layer sets it: the settings
+against their schema, the connections against their contracts, the
+claims, the namespace.
 
 ## Names
 
@@ -207,7 +275,7 @@ commits](04_topology.md#the-control-planes-commits)):
 
 | Operation | Writes |
 |---|---|
-| a project | `projects/<p>/project.yaml`; its description is its key `description`, first when new, the project's own: `tree.Load` leaves it out of the context of the project's instances (`tree.ProjectDescription`). In a split topology, the project's repository first (Forgejo, named after the projects url, without a workflow), then its entry of `projects.yaml` |
+| a project | `projects/<p>/project.yaml`; its description is its key `description`, first when new, the project's own: `tree.Load` leaves it out of the values of the project's instances (`tree.ProjectDescription`). In a split topology, the project's repository first (Forgejo, named after the projects url, without a workflow), then its entry of `projects.yaml` |
 | an instance | `instance.yaml` (`service`, `version`, and `claimers` as read: absent, `[]` or listed, `treeedit.Instance.Claimers`) and `config.yaml` (its values; none when it has none), each only when its content changes, so that a hand-written file keeps its comments |
 | a connection | the entry `connections.<name>` of `project.yaml`, or of `platform.yaml` for a platform connection, as okdp-compiler writes a `compiler.Connection`: `contract`, `description`, `secretRef`, then the contract's fields, sorted |
 | a named claim | the entry `claims.<name>` of `project.yaml`, a `compiler.ClaimSpec`: `contract`, `class` or `provider`, `request` |

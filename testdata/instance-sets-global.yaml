@@ -1,4 +1,4 @@
-# error: values layer 1: global.okdp is set by the context (Inputs.Context)
+# error: db/projects/demo/instances/webapp/config.yaml: global.okdp: the platform's settings, of platform.yaml, and the classes a project adds, of its project.yaml
 # global is the platform's: an instance may not move its host, where its
 # OAuth clients register, nor set a global value of every chart.
 global:

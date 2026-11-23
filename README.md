@@ -9,8 +9,11 @@ commits the output, which the engine reconciles.
 
 okdp-compiler compiles the instances, binds their claims and holds the
 mandatory rule set of an OKDP platform. okdp-gitops does everything
-around the compile: it reads the tree (package `tree`), adds the
-security set of okdp-compiler-security (upstream values, ingress hosts),
+around the compile: it reads the tree (package `tree`) and enforces
+what each of its files may set by its origin, the platform's, a
+project's or an instance's (the compiler takes their values as flat
+layers), adds the security set of okdp-compiler-security (upstream
+values, ingress hosts),
 checks the final values against the upstream charts, writes the targets
 (`helm`, `umbrella`, `flux`, `argocd`), reads and commits the Git
 repositories, and holds the edits of the tree the control plane
@@ -33,7 +36,7 @@ Three ways to use it:
 platform.yaml                          the platform: global.okdp, provisioning classes, platform connections
 catalogs.yaml                          the catalog repositories to fetch (and the console's menu)
 projects.yaml                          split topology only: the projects
-projects/<p>/project.yaml              a project: its globals, classes, connections, named claims
+projects/<p>/project.yaml              a project: its globals, classes, connections, named claims, access
 projects/<p>/instances/<i>/
   instance.yaml                        {service, version}: the package; claimers, its consent as a provider
   config.yaml                          its values: parameters and upstream values

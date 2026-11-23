@@ -1,4 +1,4 @@
-# error: context layer 3 (level 1): global.storageClass: a key of global the platform does not let a project set (Inputs.Context): global.okdp.policy.projectGlobals lists none
+# error: db/projects/demo/project.yaml: global.storageClass: a key of global the platform does not let a project set: global.okdp.policy.projectGlobals of db/platform.yaml lists none
 # The platform lists no key of global (policy.projectGlobals: []): a project
 # sets none, storageClass, which it sets by default, included.
 platform:

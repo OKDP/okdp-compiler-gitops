@@ -1,4 +1,4 @@
-# error: context layer 2 (level 1): global.security: a key of global the platform does not let a project set
+# error: db/projects/demo/project.yaml: global.security: a key of global the platform does not let a project set: global.okdp.policy.projectGlobals of db/platform.yaml lists project, storageClass
 # A project's file (project.yaml) setting, under global, a key of the
 # Bitnami charts that lets an unverified image run, past deniedKeys.
 global:

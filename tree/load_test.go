@@ -26,7 +26,7 @@ var whole = fstest.MapFS{
 	"contracts/README.md":                        file("not a contract\n"),
 	"catalog/app/1.0.0/Chart.yaml":               file("apiVersion: v2\nname: app\nversion: 1.0.0\n"),
 	"catalog/app/2.0.0/Chart.yaml":               file("apiVersion: v2\nname: app\nversion: 2.0.0\n"),
-	"projects/demo/project.yaml":                 file("description: The demo\nglobal: {team: demo}\nclaims: {reports: {contract: database}}\n"),
+	"projects/demo/project.yaml":                 file("description: The demo\nglobal: {project: {team: demo}}\nclaims: {reports: {contract: database}}\n"),
 	"projects/demo/instances/b/instance.yaml":    file("service: app\nversion: 1.0.0\n"),
 	"projects/demo/instances/a/instance.yaml":    file("service: app\nversion: 1.0.0\n"),
 	"projects/demo/instances/a/connections.yaml": file("connections: {ext: {contract: database, host: h}}\n"),
@@ -49,18 +49,20 @@ func split(prefixes ...string) fstest.MapFS {
 }
 
 // summary: what Load gives, by instance: its namespace and release, its
-// name, its package, its layers, its claimers when it has some.
+// name, its package, the keys of each of its values layers, in order, its
+// groups, its claimers when it has some.
 func summary(t *testing.T, instances []compiler.Instance) []string {
 	t.Helper()
 	var got []string
 	for _, inst := range instances {
 		in := inst.Inputs
 		s := in.Namespace + "/" + in.Release + " (" + inst.Name + ") " + inst.Definition.Chart.Name + "-" + inst.Definition.Chart.Version
-		for _, l := range in.Context {
-			s += " " + strings.Join(slices.Sorted(maps.Keys(l.Values)), ",") + "@" + string(rune('0'+l.Level))
-		}
 		for _, v := range in.Values {
 			s += " " + strings.Join(slices.Sorted(maps.Keys(v)), ",")
+		}
+		groups := Groups(in)
+		for _, g := range slices.Sorted(maps.Keys(groups)) {
+			s += " " + g + "=" + string(groups[g])
 		}
 		if _, err := in.Contracts.Open("database.schema.json"); err != nil {
 			s += " no contract"
@@ -75,15 +77,16 @@ func summary(t *testing.T, instances []compiler.Instance) []string {
 
 // TestLoad: the instances of a tree, by project then instance, each with
 // its release, <project>-<instance>, its name, the instance's directory
-// name, its package, one Definition per version, its layers by level,
-// the project's without its description, and its claimers, of its
-// instance file, nil without; the same tree split into
+// name, its package, one Definition per version, its values layers, the
+// platform's, the project's without its description, its connections,
+// its values, its groups, the default group without access, and its
+// claimers, of its instance file, nil without; the same tree split into
 // repositories, in any order.
 func TestLoad(t *testing.T) {
 	want := []string{
-		"demo/demo-a (a) app-1.0.0 global@0 claims,global@1 connections@2 replicas",
-		"demo/demo-b (b) app-1.0.0 global@0 claims,global@1",
-		"other/other-c (c) app-2.0.0 global@0 claimers demo,*",
+		"demo/demo-a (a) app-1.0.0 global claims,global connections replicas okdp-project-demo=editor",
+		"demo/demo-b (b) app-1.0.0 global claims,global okdp-project-demo=editor",
+		"other/other-c (c) app-2.0.0 global okdp-project-other=editor claimers demo,*",
 	}
 	instances, err := Load(context.Background(), []Repository{{"db", whole, RoleTree}}, nil)
 	if err != nil {
@@ -312,7 +315,7 @@ func TestLoadProjects(t *testing.T) {
 		"platform.yaml":                              file("global: {okdp: {cluster: {domain: example.org}}}\n"),
 		"catalog/app/1.0.0/Chart.yaml":               file("apiVersion: v2\nname: app\nversion: 1.0.0\n"),
 		"projects/good/instances/a/instance.yaml":    file("service: app\nversion: 1.0.0\n"),
-		"projects/stray/project.yaml":                file("global: {team: stray}\n"),
+		"projects/stray/project.yaml":                file("global: {project: {team: stray}}\n"),
 		"projects/stray/instances/a/instance.yaml":   file("service: app\nversion: 1.0.0\n"),
 		"projects/stray/instances/b/instance.yaml":   file("service: app\nversion: 1.0.0\n"),
 		"projects/stray/instances/b/values.yaml":     file("replicas: 2\n"),
@@ -325,7 +328,7 @@ func TestLoadProjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := summary(t, l.Instances), []string{"good/good-a (a) app-1.0.0 global@0 no contract"}; !reflect.DeepEqual(got, want) {
+	if got, want := summary(t, l.Instances), []string{"good/good-a (a) app-1.0.0 global okdp-project-good=editor no contract"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("instances: got %q\nwant %q", got, want)
 	}
 	var names []string
@@ -342,10 +345,10 @@ func TestLoadProjects(t *testing.T) {
 		t.Errorf("refused: got %q, want %q", names, want)
 	}
 	in := l.Refused[2].Inputs
-	if l.Refused[0].Inputs.Context[0].Level != 0 || len(l.Refused[0].Inputs.Context) != 1 {
-		t.Errorf("broken's inputs: the platform's layer alone: %+v", l.Refused[0].Inputs)
+	if len(l.Refused[0].Inputs.Values) != 1 || l.Refused[0].Inputs.Settings != nil {
+		t.Errorf("broken's inputs: the platform's layer alone, no group: %+v", l.Refused[0].Inputs)
 	}
-	if in.Namespace != "stray" || len(in.Context) != 2 || in.Context[1].Values["global"] == nil {
+	if in.Namespace != "stray" || len(in.Values) != 2 || in.Values[1]["global"] == nil || Groups(in)["okdp-project-stray"] != compiler.AccessEditor {
 		t.Errorf("stray's inputs: %+v", in)
 	}
 	if got := l.Refused[2].Problems; len(got) != 1 || !strings.HasPrefix(got[0], "db/projects/stray/instances/b/values.yaml: not a file of an instance") {

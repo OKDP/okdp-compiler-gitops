@@ -79,7 +79,7 @@ connections:
 
 A package that requires a value the platform does not set does not
 compile, and says which
-(`global.okdp.ingress.className is required. It is a context value: ...`).
+(`global.okdp.ingress.className is required. It is a setting, of the values ...`).
 
 ## 3. The catalogs
 
@@ -115,10 +115,16 @@ description: The platform's databases
 # projects/data/instances/postgresql/instance.yaml
 service: postgresql
 version: 1.0.0
+claimers: ["*"]   # every project may claim of it, through the platform's classes
 ```
 
+A provider of another namespace serves a claim only with its consent,
+`claimers` of its `instance.yaml` (else its package's `provisions`),
+whatever class routed the claim: the platform's classes route the
+claims of every project, the provider lists those it serves.
+
 A project of users: its classes beside the platform's, its connections,
-its named claims ([levels](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#levels),
+its named claims ([the levels](specs/01_layout.md#the-levels),
 [claims](https://github.com/OKDP/okdp-compiler/blob/main/docs/specs/01_inputs_outputs.md#claims)):
 
 ```yaml
@@ -137,8 +143,12 @@ claims:
 ```
 
 The `description` of `project.yaml` is the project's own, which the
-console shows: the compiler leaves it out of the context of the
-project's instances.
+console shows: the tree leaves it out of the values of the project's
+instances. A project's file sets what a project may, and no more: of
+`global.okdp` its classes alone, of `global` the keys the platform lists
+(`global.okdp.policy.projectGlobals`), nothing the platform sets, no
+template code; okdp-gitops refuses the project otherwise ([the
+levels](specs/01_layout.md#the-levels)).
 
 A connection's secret fields are in a Secret of the namespace that
 references it (`secretRef: {name}`), which okdp-gitops never writes, or

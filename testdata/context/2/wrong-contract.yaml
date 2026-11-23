@@ -1,6 +1,7 @@
-# error: connection "store" has contract "s3", "database" is expected
+# error: connection "store" has contract "http", "database" is expected
 database: store
 connections:
   store:
-    contract: s3
-    url: "https://s3.example.org"
+    contract: http
+    url: "https://store.example.org"
+    internalUrl: "http://store.store.svc"

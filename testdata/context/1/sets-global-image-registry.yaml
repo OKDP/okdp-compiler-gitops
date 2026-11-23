@@ -1,4 +1,4 @@
-# error: context layer 2 (level 1): global.imageRegistry: a key of global the platform does not let a project set
+# error: db/projects/demo/project.yaml: global.imageRegistry: a key of global the platform does not let a project set: global.okdp.policy.projectGlobals of db/platform.yaml lists project, storageClass
 # A project's file (project.yaml) giving every chart of its instances an
 # image registry through global, past the upstream policy's registries:
 # global.imageRegistry reaches the charts that read it (CMP-12).

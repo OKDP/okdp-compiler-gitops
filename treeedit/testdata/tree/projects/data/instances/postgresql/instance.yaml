@@ -1,2 +1,5 @@
 service: postgresql
 version: 1.0.0
+# The provider of the platform's classes (platform.yaml), which serve the
+# claims of every project: its consent to every namespace.
+claimers: ["*"]

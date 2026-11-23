@@ -9,6 +9,7 @@ import (
 	"time"
 
 	compiler "github.com/okdp/okdp-compiler"
+	"github.com/okdp/okdp-compiler-security/policy"
 
 	"github.com/okdp/okdp-gitops/internal/graph"
 )
@@ -40,9 +41,14 @@ type BuildOptions struct {
 	AllowPlainSecrets bool // Inputs.AllowPlainSecrets of each instance
 	// Rules is Inputs.Rules of each instance. Nil applies the mandatory
 	// rules alone.
-	Rules        *compiler.RuleSet
-	Finalize     compiler.Finalize                                  // Inputs.Finalize; nil is Helm's merge
-	CheckGlobals func(context.Context, compiler.GlobalsInput) error // Inputs.CheckGlobals; nil checks nothing
+	Rules    *compiler.RuleSet
+	Finalize compiler.Finalize // Inputs.Finalize; nil is Helm's merge
+	// CheckGlobals is the host's policy on the global of the layers the
+	// platform does not review: a project's file, an instance's values
+	// file (policy.CheckGlobals), called as the tree loads. What it
+	// refuses is a problem of the project's (Tree.Refused). Nil checks
+	// nothing.
+	CheckGlobals func(context.Context, policy.GlobalsInput) error
 	// Loaded, when set, is given the instances of the projects that load,
 	// before they compile, with ctx: what a Finalize reads that the
 	// compiler does not (the upstream charts of their Chart.yaml, fetched
@@ -61,7 +67,7 @@ type BuildOptions struct {
 // other projects compile. A refused instance is not an error either: it
 // is the tree's answer (Instance.Err).
 func Build(ctx context.Context, repos []Repository, opts BuildOptions) (*Tree, error) {
-	loaded, err := LoadProjects(ctx, repos, opts.Rules)
+	loaded, err := loadProjects(ctx, repos, opts.Rules, opts.CheckGlobals)
 	if err != nil {
 		return nil, err
 	}
@@ -72,14 +78,13 @@ func Build(ctx context.Context, repos []Repository, opts BuildOptions) (*Tree, e
 		instances[i].Inputs.AllowPlainSecrets = opts.AllowPlainSecrets
 		instances[i].Inputs.Finalize = opts.Finalize
 		instances[i].Inputs.Rules = opts.Rules
-		instances[i].Inputs.CheckGlobals = opts.CheckGlobals
 	}
 	if opts.Loaded != nil {
 		opts.Loaded(ctx, slices.Clone(instances))
 	}
 	t := Compile(ctx, instances)
 	for _, r := range loaded.Refused {
-		r.Inputs.Rules = opts.Rules // CheckProject reads them for a project that does not load
+		r.Inputs.Rules = opts.Rules // compiler.SettingsOf reads them for a project that does not load
 		t.Refused = append(t.Refused, r)
 	}
 	return t, nil

@@ -482,10 +482,10 @@ func TestAProjectOfAReservedNameIsNotCreated(t *testing.T) {
 	}
 	before, commits := store.Files(), len(store.Messages)
 	for name, want := range map[string]string{
-		"kube-foo": `project "kube-foo": the namespace is reserved: kube-* is Kubernetes' own (kube-system, kube-public, kube-node-lease)`,
-		"platform": `project "platform": the namespace is reserved: platform/ holds the platform's keys of the secret store, which no project writes`,
-		"argocd":   `project "argocd": the namespace is reserved: a deployer engine's, or the namespace its target writes in (argocd, flux-system, okdp-releases): a project's releases there would drive the engine`,
-		"openbao":  `project "openbao": the namespace is reserved by the platform (global.okdp.policy.reserved): no project has it`,
+		"kube-foo": `namespace "kube-foo": the namespace is reserved: kube-* is Kubernetes' own (kube-system, kube-public, kube-node-lease)`,
+		"platform": `namespace "platform": the namespace is reserved: platform/ holds the platform's keys of the secret store, which no project writes`,
+		"argocd":   `namespace "argocd": the namespace is reserved: a deployer engine's, or the namespace its target writes in (argocd, flux-system, okdp-releases): a project's releases there would drive the engine`,
+		"openbao":  `namespace "openbao": the namespace is reserved by the platform (global.okdp.policy.reserved): no project has it`,
 	} {
 		_, err := d.CreateProject(ctx, alice, treeedit.Project{Name: name})
 		var compileErr *treeedit.CompileError

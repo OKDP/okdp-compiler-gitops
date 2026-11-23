@@ -30,12 +30,16 @@ plane.
    Helm's merge and the [policy](05_rules.md), of the tree and the
    catalogs, each a `tree.Repository`
    (`tree.Load`, then the compile):
-   every instance, its package, its context (`platform.yaml`,
-   `project.yaml`, `connections.yaml`), its values (`config.yaml`), its
-   release `<project>-<instance>` and namespace. Any problem of the load
-   (a file that does not parse, a package or a version no catalog has, a
-   part in two repositories) is a `*tree.LoadError`, listing every one, each naming its file: the tree
-   compiles no instance.
+   every instance, its package, its values layers in order
+   (`platform.yaml`, `project.yaml`, `connections.yaml`, `config.yaml`),
+   each checked for what its level may set ([the
+   levels](01_layout.md#the-levels), the security set's policy on the
+   globals of a project's and an instance's files among them), the
+   groups of its project (`access`), its release `<project>-<instance>`
+   and namespace. Any problem of the load (a file that does not parse,
+   or sets what its level may not, a package or a version no catalog
+   has, a part in two repositories) is a `*tree.LoadError`, listing
+   every one, each naming its file: the tree compiles no instance.
 4. **The charts.** With a chart source (`--charts`, the control plane's
    chart cache: `deploy.BuildOptions.Charts`), the upstream charts of
    every instance that loaded, those its `Chart.yaml` names, are fetched

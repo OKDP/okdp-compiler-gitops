@@ -82,7 +82,7 @@ func dropResource(b []byte, r string) []byte {
 func violation(ti *tree.Instance, files map[string][]byte, charts fs.FS) error {
 	ctx := context.Background() // the output of a tree is written without one
 	in := ti.Inputs
-	settings, err := compiler.PlatformOf(ctx, in)
+	settings, err := compiler.SettingsOf(ctx, in)
 	if err != nil || compiler.Privileged(settings, in.Namespace) {
 		return nil //nolint:nilerr // no platform settings: the instance's refusal says why
 	}

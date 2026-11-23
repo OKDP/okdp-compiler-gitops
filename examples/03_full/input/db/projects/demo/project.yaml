@@ -1,12 +1,13 @@
 # The project demo, the namespace demo: what it adds to the platform values
-# for every instance of the project, a context layer of level 1, merged
-# after platform.yaml, level 0, and before the
-# instance's connections.yaml, level 2, and config.yaml.
+# for every instance of the project, the file of level 1, merged after
+# platform.yaml, level 0, and before the instance's connections.yaml,
+# level 2, and config.yaml.
 #
 # A level adds, it changes nothing a lower level sets: a key platform.yaml
 # sets (global.okdp.ingress.suffix, global.imageRegistry), the same value
 # included, or a connection it gives (platform-db, datalake), even by a field
-# platform.yaml leaves out, fails the compile; and global.okdp is the
+# platform.yaml leaves out, fails the project (okdp-gitops refuses it
+# as the tree loads); and global.okdp is the
 # platform's: a project adds its classes to it (provisioning) and nothing
 # else, a key platform.yaml leaves unset included:
 #
@@ -14,12 +15,12 @@
 #   connections: {platform-db: {port: 5433}}
 #   global: {okdp: {charts: {objects: {repository: oci://x, chart: okdp-objects, version: 0.1.0}}}}
 #
-#   context layer 2 (level 1): global.okdp.ingress.suffix is set at level 0 (Inputs.Context): a level adds values, it does not change a lower level's
-#   context layer 2 (level 1): connections.platform-db is set at level 0 (Inputs.Context): a level adds values, it does not change a lower level's
-#   context layer 2 (level 1): global.okdp.charts: a platform setting, level 0 only (Inputs.Context): a project sets global.okdp.provisioning, nothing else of global.okdp
+#   examples/03_full/input/db/projects/demo/project.yaml: global.okdp.ingress.suffix is set at level 0, by examples/03_full/input/db/platform.yaml: a level adds values, it does not change a lower level's
+#   examples/03_full/input/db/projects/demo/project.yaml: connections.platform-db is set at level 0, by examples/03_full/input/db/platform.yaml: a level adds values, it does not change a lower level's
+#   examples/03_full/input/db/projects/demo/project.yaml: global.okdp.charts: a platform setting, of level 0 only (examples/03_full/input/db/platform.yaml): a project sets global.okdp.provisioning, nothing else of global.okdp
 
-# The project's description: its own, a string, no value of the context,
-# which no instance receives (compiler.ProjectDescription).
+# The project's description: its own, a string, no value of its
+# instances, which no instance receives (tree.ProjectDescription).
 description: The analytics of the demo team
 global:
   storageClass: fast-ssd               # every chart receives global

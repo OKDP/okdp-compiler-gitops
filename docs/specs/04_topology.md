@@ -86,10 +86,11 @@ plane: who writes a repository writes every file of it.
   then a platform admin. io is for a small team that trusts each of its
   members with all of it.
 - split: a team writes its project's repository, nothing else; the
-  platform's repository is the platform admins'. The levels the
-  compiler enforces (a project sets only what a project may set, an
-  instance never `global.okdp`) hold the platform's settings against a
-  project's files.
+  platform's repository is the platform admins'. The levels okdp-gitops
+  enforces as the tree loads ([the levels](01_layout.md#the-levels): a
+  project sets only what a project may set, an instance never
+  `global.okdp`) hold the platform's settings against a project's
+  files.
 
 In both, nobody but the CI's bot writes the output, and the sources hold
 no token ([the CI of the output](../01_usage.md#the-ci-of-the-output)).

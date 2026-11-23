@@ -83,6 +83,11 @@ func Files(t *tree.Tree, targets []target.Target, previous, charts fs.FS) (map[s
 		}
 	}
 	results, g, kept := tree.Partial(t, also)
+	var instances []compiler.Instance
+	for _, ti := range t.Instances {
+		instances = append(instances, ti.Instance)
+	}
+	groups := target.GroupsOf(instances)
 	if g == nil {
 		return nil, nil, errors.New("the deployment graph has a problem at no instance of the tree")
 	}
@@ -137,7 +142,7 @@ func Files(t *tree.Tree, targets []target.Target, previous, charts fs.FS) (map[s
 			c.Keep = append(slices.Clone(c.Keep), keep...)
 			tg = c
 		}
-		files, err := tg.Files(results, g)
+		files, err := tg.Files(results, g, groups)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -166,12 +171,13 @@ func Files(t *tree.Tree, targets []target.Target, previous, charts fs.FS) (map[s
 // privilege revoked, a role taken back, a tightened policy, reach the
 // kept project's namespace and identity at once, whatever its instances:
 // the instances kept are applied with today's identity, which refuses
-// what they hold that it no longer allows. An access the compile refuses
-// gives no group a role; the platform's settings refused fail it. A
+// what they hold that it no longer allows. A project whose project.yaml
+// the tree refuses, its access among it, is kept as it is
+// (tree.Refused.Own); the platform's settings refused fail it. A
 // namespace that is none a project may have today, reserved by the
 // compiler since the output was written or by the platform
 // (global.okdp.policy.reserved), drops the project: dropped says why,
-// and nothing of it is kept, nor re-derived (compiler.CheckProject, the
+// and nothing of it is kept, nor re-derived (compiler.SettingsOf, the
 // compile's own view). And the paths written of today's settings, in
 // path order.
 func rederive(t *tree.Tree, targets []target.Target, namespace string, previous map[string][]byte) (files map[string][]byte, rederived []string, dropped, err error) {
@@ -179,7 +185,7 @@ func rederive(t *tree.Tree, targets []target.Target, namespace string, previous 
 	if !ok || len(previous) == 0 {
 		return previous, nil, nil, nil
 	}
-	if err := compiler.CheckProject(context.Background(), inputs); err != nil {
+	if _, err := compiler.SettingsOf(context.Background(), inputs); err != nil {
 		switch {
 		case errors.As(err, new(*compiler.NamespaceError)):
 			return nil, nil, err, nil
@@ -201,7 +207,7 @@ func rederive(t *tree.Tree, targets []target.Target, namespace string, previous 
 		return previous, nil, nil, nil
 	}
 	p, err := target.ProjectOf(inputs)
-	if err != nil && !errors.As(err, new(*target.AccessError)) {
+	if err != nil {
 		return nil, nil, nil, fmt.Errorf("its manifests of today's settings: %w", err)
 	}
 	// The network policy's claimers: those of the claims bound to every
