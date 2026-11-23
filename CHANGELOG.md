@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.0](https://github.com/OKDP/okdp-compiler-gitops/compare/v0.1.0...v0.2.0) (2026-11-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* okdp-gitops-compile, the rule set of okdp-gitops (the engines' namespaces, the platform's objects, network, controlPlane, groupPrefix, projectApiGroups), Argo CD's sync options, the deployer's Role and the secret store its own, the groups and the privileged projects from okdp-compiler-security
+* the tree enforces the levels, access and the globals policy itself (tree/levels.go), the compiler given flat values and the groups in Inputs.Settings
+* the tree okdp-gitops' (package tree): its loading, compile, graph and catalogs.yaml moved from okdp-compiler, the packages and contracts read through compiler.LoadCatalog
+* the compile runs the finalValues hook after the render, compiler.Partial and LoadRepository taking the rules, Schema.Validate(v)
+* the rules okdp-compiler-security's, its policy package and the compiler's hooks on final values and rendered objects, internal/policy gone
+
+### Features
+
+* okdp-gitops-compile, the rule set of okdp-gitops (the engines' namespaces, the platform's objects, network, controlPlane, groupPrefix, projectApiGroups), Argo CD's sync options, the deployer's Role and the secret store its own, the groups and the privileged projects from okdp-compiler-security ([d5d2800](https://github.com/OKDP/okdp-compiler-gitops/commit/d5d280022d5e9d3b1848a2da1df2c3bdf7475cd9))
+* the rules okdp-compiler-security's, its policy package and the compiler's hooks on final values and rendered objects, internal/policy gone ([8fd64c8](https://github.com/OKDP/okdp-compiler-gitops/commit/8fd64c8c078eaa75480bf435673f4520f3378b0f))
+* the tree enforces the levels, access and the globals policy itself (tree/levels.go), the compiler given flat values and the groups in Inputs.Settings ([55cfad1](https://github.com/OKDP/okdp-compiler-gitops/commit/55cfad17bcc031fd11fdd34acc72bfc06d437f54))
+
+
+### Code Refactoring
+
+* the compile runs the finalValues hook after the render, compiler.Partial and LoadRepository taking the rules, Schema.Validate(v) ([b868e7c](https://github.com/OKDP/okdp-compiler-gitops/commit/b868e7c7ae09d9557ec345406085acf8b42ac316))
+* the tree okdp-gitops' (package tree): its loading, compile, graph and catalogs.yaml moved from okdp-compiler, the packages and contracts read through compiler.LoadCatalog ([a89ef16](https://github.com/OKDP/okdp-compiler-gitops/commit/a89ef16f9b74f5d5c3afe44a92c30f01c9a6fb0d))
+
 ## 0.1.0 (2026-11-18)
 
 
